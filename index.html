@@ -3,19 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>古着販売 利益計算アプリ</title>
+  <title>古着販売 売上登録アプリ</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- ページ全体を中央に配置するための入れ物です -->
   <main class="app">
-    <!-- カード型の白いエリアです -->
-    <section class="card">
-      <h1>古着販売 利益計算</h1>
-      <p class="lead">売値や送料を入力して、販売後の利益を確認できます。</p>
+    <!-- アプリの見出しです -->
+    <header class="page-header">
+      <h1>古着販売 売上登録</h1>
+      <p class="lead">販売した商品を登録して、利益と利益率を一覧で確認できます。</p>
+    </header>
 
-      <!-- 入力フォームです。JavaScriptで送信時の処理を行います -->
-      <form id="profitForm" class="form">
+    <!-- 売上を入力するカードです -->
+    <section class="card">
+      <h2>売上を登録</h2>
+
+      <!-- 入力フォームです。JavaScriptで登録と計算を行います -->
+      <form id="salesForm" class="form">
+        <label for="saleDate">
+          販売日
+          <input id="saleDate" class="field" type="date" required>
+        </label>
+
+        <label for="salesChannel">
+          販路
+          <select id="salesChannel" class="field" required>
+            <option value="メルカリメイン">メルカリメイン</option>
+            <option value="メルカリサブ">メルカリサブ</option>
+            <option value="ヤフー">ヤフー</option>
+            <option value="ラクマ">ラクマ</option>
+          </select>
+        </label>
+
+        <label for="itemName">
+          商品名
+          <input id="itemName" class="field" type="text" placeholder="例: Levi's デニムジャケット" required>
+        </label>
+
         <label for="salePrice">
           売値
           <span class="input-wrap">
@@ -48,24 +73,27 @@
           </span>
         </label>
 
-        <button type="submit">計算する</button>
-      </form>
+        <label for="memo">
+          メモ
+          <textarea id="memo" class="field" rows="3" placeholder="例: 目立つ汚れなし、宅急便コンパクト"></textarea>
+        </label>
 
-      <!-- 計算結果を表示するエリアです -->
-      <section class="result" aria-live="polite">
-        <div class="result-row">
-          <span>手数料</span>
-          <strong id="feeResult">0円</strong>
-        </div>
-        <div class="result-row">
-          <span>利益</span>
-          <strong id="profitResult">0円</strong>
-        </div>
-        <div class="result-row">
-          <span>利益率</span>
-          <strong id="profitRateResult">0.0%</strong>
-        </div>
-      </section>
+        <button type="submit">登録する</button>
+      </form>
+    </section>
+
+    <!-- 登録済みの商品を表示するカードです -->
+    <section class="card">
+      <div class="list-heading">
+        <h2>登録済み一覧</h2>
+        <span id="itemCount">0件</span>
+      </div>
+
+      <!-- JavaScriptで商品カードをここに追加します -->
+      <div id="salesList" class="sales-list"></div>
+
+      <!-- 登録データがないときだけ表示します -->
+      <p id="emptyMessage" class="empty-message">まだ登録された商品はありません。</p>
     </section>
   </main>
 
