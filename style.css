@@ -92,6 +92,26 @@ textarea.field {
   line-height: 1.5;
 }
 
+.file-field {
+  padding-top: 14px;
+}
+
+/* 登録前に選んだ画像を確認するプレビュー枠です */
+.image-preview-wrap {
+  display: none;
+  overflow: hidden;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.image-preview {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+}
+
 /* 入力欄と単位を横並びにする枠です */
 .input-wrap {
   display: flex;
@@ -134,6 +154,33 @@ button:hover {
 
 button:active {
   transform: translateY(1px);
+}
+
+.edit-status {
+  display: none;
+  margin-bottom: 18px;
+  padding: 12px;
+  border-radius: 8px;
+  color: #146c5f;
+  background: #edf7f4;
+  font-weight: 700;
+}
+
+.form-actions,
+.sale-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cancel-button {
+  display: none;
+  color: #415161;
+  background: #e8eef4;
+}
+
+.cancel-button:hover {
+  background: #d9e1e8;
 }
 
 /* 全体集計のカードです */
@@ -239,6 +286,29 @@ button:active {
   background: #f7fafc;
 }
 
+.sale-image,
+.sale-no-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+}
+
+.sale-image {
+  display: block;
+  object-fit: cover;
+  background: #d9e1e8;
+}
+
+.sale-no-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #c8d1dc;
+  color: #5f6c7b;
+  background: #ffffff;
+  font-weight: 700;
+}
+
 .sale-card-header {
   display: grid;
   gap: 6px;
@@ -313,6 +383,17 @@ button:active {
   font-size: 16px;
 }
 
+.edit-button {
+  min-height: 44px;
+  color: #146c5f;
+  background: #edf7f4;
+  font-size: 16px;
+}
+
+.edit-button:hover {
+  background: #dff3ee;
+}
+
 .delete-button:hover {
   background: #ffe0de;
 }
@@ -341,7 +422,9 @@ button:active {
   }
 
   .summary-grid,
-  .channel-number-grid {
+  .channel-number-grid,
+  .form-actions,
+  .sale-actions {
     grid-template-columns: 1fr;
   }
 

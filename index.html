@@ -54,7 +54,8 @@
 
     <!-- 売上を入力するカードです -->
     <section class="card">
-      <h2>売上を登録</h2>
+      <h2 id="formTitle">売上を登録</h2>
+      <p id="editStatus" class="edit-status">編集中です。内容を変更して「更新する」を押してください。</p>
 
       <!-- 入力フォームです。JavaScriptで登録と計算を行います -->
       <form id="salesForm" class="form">
@@ -77,6 +78,17 @@
           商品名
           <input id="itemName" class="field" type="text" placeholder="例: Levi's デニムジャケット" required>
         </label>
+
+        <label for="itemImage">
+          商品画像
+          <!-- 画像だけを選べるファイル入力です。画像なしでも登録できます -->
+          <input id="itemImage" class="field file-field" type="file" accept="image/*">
+        </label>
+
+        <!-- 画像を選んだときだけ、登録前のプレビューを表示します -->
+        <div id="imagePreviewWrap" class="image-preview-wrap">
+          <img id="imagePreview" class="image-preview" alt="選択した商品画像のプレビュー">
+        </div>
 
         <label for="salePrice">
           売値
@@ -115,7 +127,11 @@
           <textarea id="memo" class="field" rows="3" placeholder="例: 目立つ汚れなし、宅急便コンパクト"></textarea>
         </label>
 
-        <button type="submit">登録する</button>
+        <div class="form-actions">
+          <button id="submitButton" type="submit">登録する</button>
+          <!-- 編集中だけ表示するキャンセルボタンです -->
+          <button id="cancelEditButton" class="cancel-button" type="button">キャンセル</button>
+        </div>
       </form>
     </section>
 

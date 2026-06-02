@@ -10,6 +10,13 @@ const totalProfit = document.getElementById("totalProfit");
 const averageProfitRate = document.getElementById("averageProfitRate");
 const summaryCount = document.getElementById("summaryCount");
 const channelSummaryList = document.getElementById("channelSummaryList");
+const itemImageInput = document.getElementById("itemImage");
+const imagePreviewWrap = document.getElementById("imagePreviewWrap");
+const imagePreview = document.getElementById("imagePreview");
+const formTitle = document.getElementById("formTitle");
+const editStatus = document.getElementById("editStatus");
+const submitButton = document.getElementById("submitButton");
+const cancelEditButton = document.getElementById("cancelEditButton");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -19,6 +26,18 @@ const canUseStorage = typeof localStorage !== "undefined";
 
 // 登録済みデータを入れておく配列です
 let sales = [];
+
+// 編集中の商品idです。nullのときは新規登録モードです
+let editingSaleId = null;
+
+// 選択中の画像をリサイズしたBase64文字列として一時的に入れておきます
+let resizedImageData = "";
+
+// 画像リサイズが終わるまで待つためのPromiseです
+let imageResizePromise = Promise.resolve("");
+
+// 画像を選び直したとき、古いリサイズ結果を使わないための番号です
+let imageSelectionId = 0;
 
 // 販路別集計で表示する販路の一覧です
 const salesChannels = ["メルカリメイン", "メルカリサブ", "ヤフー", "ラクマ"];
@@ -59,6 +78,42 @@ function calculateProfit(salePrice, costPrice, shippingFee, feeRate) {
     profit,
     profitRate
   };
+}
+
+// 選択された画像を、localStorageに保存しやすい小さなJPEG画像へ変換します
+function resizeImage(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+
+    // FileReaderで、選択した画像ファイルをBase64文字列として読み込みます
+    reader.onload = function () {
+      const image = new Image();
+
+      image.onload = function () {
+        const maxWidth = 300;
+        const scale = Math.min(1, maxWidth / image.width);
+        const width = Math.round(image.width * scale);
+        const height = Math.round(image.height * scale);
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        canvas.width = width;
+        canvas.height = height;
+
+        // canvasに縮小した画像を描き直します
+        context.drawImage(image, 0, 0, width, height);
+
+        // JPEG形式、画質0.7でBase64文字列に変換します
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      };
+
+      image.onerror = reject;
+      image.src = reader.result;
+    };
+
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 // 選択中の月に含まれるデータだけを取り出します
@@ -121,10 +176,88 @@ function saveSales() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sales));
 }
 
+// 画像プレビューと一時画像データを初期状態に戻します
+function resetImageInput() {
+  resizedImageData = "";
+  imageResizePromise = Promise.resolve("");
+  imageSelectionId += 1;
+  imagePreviewWrap.style.display = "none";
+  imagePreview.removeAttribute("src");
+  itemImageInput.value = "";
+}
+
+// フォームを新規登録モードに戻します
+function resetForm() {
+  form.reset();
+  saleDateInput.value = getTodayText();
+  document.getElementById("feeRate").value = "10";
+  editingSaleId = null;
+  formTitle.textContent = "売上を登録";
+  submitButton.textContent = "登録する";
+  editStatus.style.display = "none";
+  cancelEditButton.style.display = "none";
+  resetImageInput();
+}
+
+// 編集ボタンが押された商品データをフォームへ戻します
+function startEditSale(id) {
+  const sale = sales.find(function (targetSale) {
+    return targetSale.id === id;
+  });
+
+  if (!sale) {
+    return;
+  }
+
+  editingSaleId = id;
+  imageSelectionId += 1;
+  document.getElementById("saleDate").value = sale.saleDate;
+  document.getElementById("salesChannel").value = sale.salesChannel;
+  document.getElementById("itemName").value = sale.itemName;
+  document.getElementById("salePrice").value = sale.salePrice;
+  document.getElementById("costPrice").value = sale.costPrice;
+  document.getElementById("shippingFee").value = sale.shippingFee;
+  document.getElementById("feeRate").value = sale.feeRate || "10";
+  document.getElementById("memo").value = sale.memo || "";
+
+  // 既存画像がある場合は、画像データを保持してプレビューも表示します
+  resizedImageData = sale.imageData || "";
+  imageResizePromise = Promise.resolve(resizedImageData);
+  itemImageInput.value = "";
+
+  if (resizedImageData) {
+    imagePreview.src = resizedImageData;
+    imagePreviewWrap.style.display = "block";
+  } else {
+    imagePreviewWrap.style.display = "none";
+    imagePreview.removeAttribute("src");
+  }
+
+  formTitle.textContent = "売上を編集";
+  submitButton.textContent = "更新する";
+  editStatus.style.display = "block";
+  cancelEditButton.style.display = "block";
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 // 1つの商品カードを作ります
 function createSaleCard(sale) {
   const card = document.createElement("article");
   card.className = "sale-card";
+
+  // 画像ありならサムネイル、画像なしなら分かりやすい枠を表示します
+  if (sale.imageData) {
+    const image = document.createElement("img");
+    image.className = "sale-image";
+    image.src = sale.imageData;
+    image.alt = `${sale.itemName}の商品画像`;
+    card.appendChild(image);
+  } else {
+    const noImage = document.createElement("div");
+    noImage.className = "sale-no-image";
+    noImage.textContent = "画像なし";
+    card.appendChild(noImage);
+  }
 
   const header = document.createElement("div");
   header.className = "sale-card-header";
@@ -173,6 +306,19 @@ function createSaleCard(sale) {
     numbers.appendChild(box);
   });
 
+  const actionArea = document.createElement("div");
+  actionArea.className = "sale-actions";
+
+  const editButton = document.createElement("button");
+  editButton.className = "edit-button";
+  editButton.type = "button";
+  editButton.textContent = "編集";
+
+  // 編集ボタンが押されたら、この商品の内容を入力フォームに戻します
+  editButton.addEventListener("click", function () {
+    startEditSale(sale.id);
+  });
+
   const deleteButton = document.createElement("button");
   deleteButton.className = "delete-button";
   deleteButton.type = "button";
@@ -183,6 +329,8 @@ function createSaleCard(sale) {
     deleteSale(sale.id);
   });
 
+  actionArea.append(editButton, deleteButton);
+
   card.append(header, numbers);
 
   if (sale.memo) {
@@ -192,7 +340,7 @@ function createSaleCard(sale) {
     card.appendChild(memo);
   }
 
-  card.appendChild(deleteButton);
+  card.appendChild(actionArea);
 
   return card;
 }
@@ -279,6 +427,10 @@ function deleteSale(id) {
     return sale.id !== id;
   });
 
+  if (editingSaleId === id) {
+    resetForm();
+  }
+
   saveSales();
   renderDashboard();
 }
@@ -288,10 +440,59 @@ monthFilterInput.addEventListener("change", function () {
   renderDashboard();
 });
 
+// 編集をやめたいときは、入力フォームだけを元に戻します
+cancelEditButton.addEventListener("click", function () {
+  resetForm();
+});
+
+// 画像を選んだら、リサイズした画像を保存用に準備してプレビューも表示します
+itemImageInput.addEventListener("change", async function () {
+  imageSelectionId += 1;
+  const currentSelectionId = imageSelectionId;
+  const file = itemImageInput.files[0];
+
+  if (!file) {
+    resizedImageData = "";
+    imageResizePromise = Promise.resolve("");
+    imagePreviewWrap.style.display = "none";
+    imagePreview.removeAttribute("src");
+    return;
+  }
+
+  imageResizePromise = resizeImage(file);
+
+  try {
+    const imageData = await imageResizePromise;
+
+    // 別の画像を選び直していた場合は、古い画像をプレビューに使いません
+    if (currentSelectionId !== imageSelectionId) {
+      return;
+    }
+
+    resizedImageData = imageData;
+    imagePreview.src = resizedImageData;
+    imagePreviewWrap.style.display = "block";
+  } catch (error) {
+    resizedImageData = "";
+    imageResizePromise = Promise.resolve("");
+    imagePreviewWrap.style.display = "none";
+    imagePreview.removeAttribute("src");
+    alert("画像を読み込めませんでした。別の画像を選んでください。");
+  }
+});
+
 // フォームの「登録する」ボタンが押されたときに実行されます
-form.addEventListener("submit", function (event) {
+form.addEventListener("submit", async function (event) {
   // フォーム送信でページが再読み込みされないようにします
   event.preventDefault();
+
+  // 画像を選んでいる場合は、リサイズ処理が終わるまで待ちます
+  try {
+    await imageResizePromise;
+  } catch (error) {
+    alert("画像を読み込めませんでした。別の画像を選ぶか、画像なしで登録してください。");
+    return;
+  }
 
   // 入力された値を取得します
   const saleDate = document.getElementById("saleDate").value;
@@ -305,9 +506,9 @@ form.addEventListener("submit", function (event) {
 
   const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
 
-  // 登録する1件分のデータを作ります
+  // 登録または更新する1件分のデータを作ります
   const sale = {
-    id: Date.now(),
+    id: editingSaleId || Date.now(),
     saleDate,
     salesChannel,
     itemName,
@@ -318,22 +519,29 @@ form.addEventListener("submit", function (event) {
     fee: calculated.fee,
     profit: calculated.profit,
     profitRate: calculated.profitRate,
+    imageData: resizedImageData,
     memo
   };
 
-  // 新しいデータを先頭に追加して、保存と再表示をします
-  sales.unshift(sale);
+  if (editingSaleId) {
+    // 編集中のときは、新規追加せず既存データを上書きします
+    sales = sales.map(function (targetSale) {
+      return targetSale.id === editingSaleId ? sale : targetSale;
+    });
+  } else {
+    // 新規登録のときは、一覧の先頭に追加します
+    sales.unshift(sale);
+  }
+
   saveSales();
   renderDashboard();
 
   // 次の商品を入力しやすいようにフォームを初期状態へ戻します
-  form.reset();
-  saleDateInput.value = getTodayText();
-  document.getElementById("feeRate").value = "10";
+  resetForm();
 });
 
 // ページを開いたときに、日付の初期値と保存済みデータを準備します
-saleDateInput.value = getTodayText();
 monthFilterInput.value = getCurrentMonthText();
 loadSales();
+resetForm();
 renderDashboard();
