@@ -17,6 +17,8 @@ const formTitle = document.getElementById("formTitle");
 const editStatus = document.getElementById("editStatus");
 const submitButton = document.getElementById("submitButton");
 const cancelEditButton = document.getElementById("cancelEditButton");
+const exportCsvButton = document.getElementById("exportCsvButton");
+const csvFileInput = document.getElementById("csvFileInput");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -41,6 +43,22 @@ let imageSelectionId = 0;
 
 // 販路別集計で表示する販路の一覧です
 const salesChannels = ["メルカリメイン", "メルカリサブ", "ヤフー", "ラクマ"];
+
+// CSVに出力する列の名前です。画像データは重いので含めません
+const csvHeaders = [
+  "id",
+  "販売日",
+  "販路",
+  "商品名",
+  "売値",
+  "仕入れ値",
+  "送料",
+  "販売手数料率",
+  "手数料",
+  "利益",
+  "利益率",
+  "メモ"
+];
 
 // 数字を「1,000円」のように見やすい円表示へ変換します
 function formatYen(value) {
@@ -78,6 +96,221 @@ function calculateProfit(salePrice, costPrice, shippingFee, feeRate) {
     profit,
     profitRate
   };
+}
+
+// CSV内でカンマや改行があっても崩れないように、値をダブルクォートで囲みます
+function escapeCsvValue(value) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+// 1件の商品データをCSVの1行分に変換します
+function saleToCsvRow(sale) {
+  return [
+    sale.id,
+    sale.saleDate,
+    sale.salesChannel,
+    sale.itemName,
+    sale.salePrice,
+    sale.costPrice,
+    sale.shippingFee,
+    sale.feeRate,
+    sale.fee,
+    sale.profit,
+    sale.profitRate,
+    sale.memo
+  ].map(escapeCsvValue).join(",");
+}
+
+// CSVテキストを作ります。Excelで開きやすいようにBOMも先頭に付けます
+function buildCsvText() {
+  const headerRow = csvHeaders.map(escapeCsvValue).join(",");
+  const dataRows = sales.map(saleToCsvRow);
+
+  return `\uFEFF${[headerRow, ...dataRows].join("\n")}`;
+}
+
+// CSVの1行を配列へ変換します
+function parseCsvLine(line) {
+  const values = [];
+  let currentValue = "";
+  let isInQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === '"' && isInQuotes && nextChar === '"') {
+      currentValue += '"';
+      index += 1;
+    } else if (char === '"') {
+      isInQuotes = !isInQuotes;
+    } else if (char === "," && !isInQuotes) {
+      values.push(currentValue);
+      currentValue = "";
+    } else {
+      currentValue += char;
+    }
+  }
+
+  values.push(currentValue);
+  return values;
+}
+
+// CSV全体を2次元配列へ変換します。引用符の中の改行も扱えるようにしています
+function parseCsvText(csvText) {
+  const rows = [];
+  let currentLine = "";
+  let isInQuotes = false;
+  const text = csvText.replace(/^\uFEFF/, "");
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"' && isInQuotes && nextChar === '"') {
+      currentLine += char + nextChar;
+      index += 1;
+    } else if (char === '"') {
+      isInQuotes = !isInQuotes;
+      currentLine += char;
+    } else if ((char === "\n" || char === "\r") && !isInQuotes) {
+      if (currentLine.trim() !== "") {
+        rows.push(parseCsvLine(currentLine));
+      }
+
+      currentLine = "";
+
+      if (char === "\r" && nextChar === "\n") {
+        index += 1;
+      }
+    } else {
+      currentLine += char;
+    }
+  }
+
+  if (currentLine.trim() !== "") {
+    rows.push(parseCsvLine(currentLine));
+  }
+
+  return rows;
+}
+
+// CSVの文字列データを、アプリで使う商品データの形に戻します
+function csvRowToSale(headerIndexes, row) {
+  const salePrice = Number(row[headerIndexes["売値"]] || 0);
+  const costPrice = Number(row[headerIndexes["仕入れ値"]] || 0);
+  const shippingFee = Number(row[headerIndexes["送料"]] || 0);
+  const feeRate = Number(row[headerIndexes["販売手数料率"]] || 0);
+  const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
+  const importedId = Number(row[headerIndexes.id]);
+
+  return {
+    id: importedId || Date.now() + Math.floor(Math.random() * 100000),
+    saleDate: row[headerIndexes["販売日"]] || getTodayText(),
+    salesChannel: row[headerIndexes["販路"]] || "メルカリメイン",
+    itemName: row[headerIndexes["商品名"]] || "名称未設定",
+    salePrice,
+    costPrice,
+    shippingFee,
+    feeRate,
+    fee: Number(row[headerIndexes["手数料"]]) || calculated.fee,
+    profit: Number(row[headerIndexes["利益"]]) || calculated.profit,
+    profitRate: Number(row[headerIndexes["利益率"]]) || calculated.profitRate,
+    imageData: "",
+    memo: row[headerIndexes["メモ"]] || ""
+  };
+}
+
+// CSVファイルの内容を、登録データ配列に変換します
+function csvTextToSales(csvText) {
+  const rows = parseCsvText(csvText);
+  const headers = rows[0] || [];
+  const headerIndexes = {};
+
+  headers.forEach(function (header, index) {
+    headerIndexes[header] = index;
+  });
+
+  return rows.slice(1).map(function (row) {
+    return csvRowToSale(headerIndexes, row);
+  });
+}
+
+// CSVファイルをダウンロードします
+function exportCsv() {
+  if (sales.length === 0) {
+    alert("出力するデータがありません。");
+    return;
+  }
+
+  const csvText = buildCsvText();
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `sales-data-${getTodayText()}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// CSV読み込み時、idが重複しないように調整します
+function ensureUniqueImportedIds(importedSales, baseSales) {
+  const usedIds = new Set(baseSales.map(function (sale) {
+    return sale.id;
+  }));
+
+  return importedSales.map(function (sale) {
+    if (usedIds.has(sale.id)) {
+      sale.id = Date.now() + Math.floor(Math.random() * 100000);
+    }
+
+    usedIds.add(sale.id);
+    return sale;
+  });
+}
+
+// CSVファイルを読み込み、追加または置き換えでアプリに反映します
+function importCsv(file, importMode) {
+  const reader = new FileReader();
+
+  reader.onload = function () {
+    const importedSales = csvTextToSales(reader.result);
+
+    if (importedSales.length === 0) {
+      alert("読み込めるデータがありませんでした。");
+      csvFileInput.value = "";
+      return;
+    }
+
+    const isReplaceMode = importMode === "replace";
+    const message = isReplaceMode
+      ? "現在のデータをCSVの内容で置き換えます。よろしいですか？"
+      : "CSVの内容を現在のデータに追加します。よろしいですか？";
+
+    if (!confirm(message)) {
+      csvFileInput.value = "";
+      return;
+    }
+
+    // CSVには画像を含めないため、読み込んだ商品は画像なしになります
+    const baseSales = isReplaceMode ? [] : sales;
+    const safeImportedSales = ensureUniqueImportedIds(importedSales, baseSales);
+
+    sales = isReplaceMode ? safeImportedSales : [...safeImportedSales, ...sales];
+    saveSales();
+    resetForm();
+    renderDashboard();
+    csvFileInput.value = "";
+  };
+
+  reader.onerror = function () {
+    alert("CSVファイルを読み込めませんでした。");
+    csvFileInput.value = "";
+  };
+
+  reader.readAsText(file, "utf-8");
 }
 
 // 選択された画像を、localStorageに保存しやすい小さなJPEG画像へ変換します
@@ -443,6 +676,23 @@ monthFilterInput.addEventListener("change", function () {
 // 編集をやめたいときは、入力フォームだけを元に戻します
 cancelEditButton.addEventListener("click", function () {
   resetForm();
+});
+
+// CSV出力ボタンが押されたら、全データをCSVとして保存します
+exportCsvButton.addEventListener("click", function () {
+  exportCsv();
+});
+
+// CSVファイルが選ばれたら、追加または置き換えで読み込みます
+csvFileInput.addEventListener("change", function () {
+  const file = csvFileInput.files[0];
+
+  if (!file) {
+    return;
+  }
+
+  const importMode = document.querySelector("input[name='importMode']:checked").value;
+  importCsv(file, importMode);
 });
 
 // 画像を選んだら、リサイズした画像を保存用に準備してプレビューも表示します

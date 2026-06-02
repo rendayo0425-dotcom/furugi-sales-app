@@ -23,6 +23,34 @@
       </label>
     </section>
 
+    <!-- CSVの出力と読み込みを行う管理メニューです -->
+    <section class="card csv-card">
+      <h2>データ管理</h2>
+
+      <div class="csv-actions">
+        <button id="exportCsvButton" type="button">CSV出力</button>
+
+        <div class="csv-import-box">
+          <label for="csvFileInput">
+            CSV読み込み
+            <input id="csvFileInput" class="field file-field" type="file" accept=".csv,text/csv">
+          </label>
+
+          <!-- 読み込み時に、今のデータへ追加するか置き換えるかを選びます -->
+          <div class="import-mode">
+            <label>
+              <input type="radio" name="importMode" value="append" checked>
+              現在のデータに追加する
+            </label>
+            <label>
+              <input type="radio" name="importMode" value="replace">
+              現在のデータを置き換える
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 選択中の月の全体集計を表示するカードです -->
     <section class="card summary-card">
       <h2>全体集計</h2>

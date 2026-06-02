@@ -183,6 +183,41 @@ button:active {
   background: #d9e1e8;
 }
 
+/* CSV出力と読み込みをまとめる管理メニューです */
+.csv-card {
+  border-top: 5px solid #415161;
+}
+
+.csv-actions {
+  display: grid;
+  gap: 16px;
+}
+
+.csv-import-box {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.import-mode {
+  display: grid;
+  gap: 10px;
+}
+
+.import-mode label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.import-mode input {
+  width: 18px;
+  height: 18px;
+}
+
 /* 全体集計のカードです */
 .summary-card {
   border-top: 5px solid #146c5f;
