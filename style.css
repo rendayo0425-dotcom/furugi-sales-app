@@ -279,6 +279,10 @@ button:active {
   gap: 14px;
 }
 
+.summary-year-control {
+  margin-bottom: 14px;
+}
+
 .monthly-summary-item {
   display: grid;
   gap: 12px;

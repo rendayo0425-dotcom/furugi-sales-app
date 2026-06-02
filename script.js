@@ -14,6 +14,7 @@ const averageProfitRate = document.getElementById("averageProfitRate");
 const summaryCount = document.getElementById("summaryCount");
 const channelSummaryList = document.getElementById("channelSummaryList");
 const monthlySummaryList = document.getElementById("monthlySummaryList");
+const summaryYearSelect = document.getElementById("summaryYearSelect");
 const itemImageInput = document.getElementById("itemImage");
 const imagePreviewWrap = document.getElementById("imagePreviewWrap");
 const imagePreview = document.getElementById("imagePreview");
@@ -416,12 +417,56 @@ function formatMonthLabel(monthText) {
   return `${parts[0]}年${Number(parts[1])}月`;
 }
 
+// 登録済みデータから、月別サマリーで選べる年度を作ります
+function getAvailableSummaryYears() {
+  const years = new Set();
+
+  sales.forEach(function (sale) {
+    if (sale.saleDate) {
+      years.add(sale.saleDate.slice(0, 4));
+    }
+  });
+
+  return [...years].sort(function (firstYear, secondYear) {
+    return secondYear.localeCompare(firstYear);
+  });
+}
+
+// 月別サマリーの年度セレクトを、登録データに合わせて更新します
+function updateSummaryYearOptions() {
+  const currentYear = String(new Date().getFullYear());
+  const years = getAvailableSummaryYears();
+  const previousValue = summaryYearSelect.value;
+  const selectedYear = years.includes(previousValue)
+    ? previousValue
+    : years.includes(currentYear)
+      ? currentYear
+      : years[0] || currentYear;
+
+  summaryYearSelect.innerHTML = "";
+
+  const displayYears = years.length > 0 ? years : [currentYear];
+
+  displayYears.forEach(function (year) {
+    const option = document.createElement("option");
+    option.value = year;
+    option.textContent = `${year}年`;
+    summaryYearSelect.appendChild(option);
+  });
+
+  summaryYearSelect.value = selectedYear;
+}
+
 // 全データを販売日の年月ごとにまとめます
-function getMonthlySummaryGroups() {
+function getMonthlySummaryGroups(selectedYear) {
   const groups = {};
 
   sales.forEach(function (sale) {
     if (!sale.saleDate) {
+      return;
+    }
+
+    if (sale.saleDate.slice(0, 4) !== selectedYear) {
       return;
     }
 
@@ -879,12 +924,14 @@ function renderChannelSummary(filteredSales) {
 // 月別サマリーを画面に表示します
 function renderMonthlySummary() {
   monthlySummaryList.innerHTML = "";
-  const monthlyGroups = getMonthlySummaryGroups();
+  updateSummaryYearOptions();
+  const selectedYear = summaryYearSelect.value;
+  const monthlyGroups = getMonthlySummaryGroups(selectedYear);
 
   if (monthlyGroups.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-message";
-    empty.textContent = "まだ月別サマリーを表示できるデータがありません。";
+    empty.textContent = `${selectedYear}年の月別サマリーを表示できるデータがありません。`;
     monthlySummaryList.appendChild(empty);
     return;
   }
@@ -995,6 +1042,11 @@ channelFilter.addEventListener("change", function () {
 // 並び替え条件を選び直したら、一覧だけを並び替えます
 sortSelect.addEventListener("change", function () {
   renderDashboard();
+});
+
+// 年度を変えたら、月別サマリーだけを選択年度に切り替えます
+summaryYearSelect.addEventListener("change", function () {
+  renderMonthlySummary();
 });
 
 // 編集をやめたいときは、入力フォームだけを元に戻します
