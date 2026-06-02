@@ -24,8 +24,12 @@
     </section>
 
     <!-- 一覧の検索・絞り込み・並び替えを行う表示設定です -->
-    <section class="card filter-card">
-      <h2>表示設定</h2>
+    <section class="card filter-card" data-section-id="filters">
+      <div class="section-header">
+        <h2>表示設定</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
       <div class="filter-grid">
         <label for="searchInput">
           商品名・メモ検索
@@ -54,12 +58,17 @@
           </select>
         </label>
       </div>
+      </div>
     </section>
 
     <!-- CSVの出力と読み込みを行う管理メニューです -->
-    <section class="card csv-card">
-      <h2>データ管理</h2>
+    <section class="card csv-card" data-section-id="csv">
+      <div class="section-header">
+        <h2>データ管理</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
 
+      <div class="section-content">
       <div class="csv-actions">
         <button id="exportCsvButton" type="button">CSV出力</button>
 
@@ -82,18 +91,28 @@
           </div>
         </div>
       </div>
+      </div>
     </section>
 
     <!-- 登録済みデータを月ごとにまとめたサマリーです -->
-    <section class="card monthly-summary-card">
-      <h2>月別サマリー</h2>
+    <section class="card monthly-summary-card" data-section-id="monthlySummary">
+      <div class="section-header">
+        <h2>月別サマリー</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
       <!-- JavaScriptで月別サマリーカードをここに追加します -->
       <div id="monthlySummaryList" class="monthly-summary-list"></div>
+      </div>
     </section>
 
     <!-- 選択中の月の全体集計を表示するカードです -->
-    <section class="card summary-card">
-      <h2>全体集計</h2>
+    <section class="card summary-card" data-section-id="totalSummary">
+      <div class="section-header">
+        <h2>全体集計</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
       <div class="summary-grid">
         <div class="summary-box">
           <span>売上合計</span>
@@ -124,17 +143,27 @@
           <strong id="summaryCount">0件</strong>
         </div>
       </div>
+      </div>
     </section>
 
     <!-- 選択中の月の販路別集計を表示するカードです -->
-    <section class="card channel-summary-card">
-      <h2>販路別集計</h2>
+    <section class="card channel-summary-card" data-section-id="channelSummary">
+      <div class="section-header">
+        <h2>販路別集計</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
       <div id="channelSummaryList" class="channel-summary-list"></div>
+      </div>
     </section>
 
     <!-- 売上を入力するカードです -->
-    <section class="card">
-      <h2 id="formTitle">売上を登録</h2>
+    <section class="card" data-section-id="salesForm">
+      <div class="section-header">
+        <h2 id="formTitle">売上を登録</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
       <p id="editStatus" class="edit-status">編集中です。内容を変更して「更新する」を押してください。</p>
 
       <!-- 入力フォームです。JavaScriptで登録と計算を行います -->
@@ -213,20 +242,26 @@
           <button id="cancelEditButton" class="cancel-button" type="button">キャンセル</button>
         </div>
       </form>
+      </div>
     </section>
 
     <!-- 登録済みの商品を表示するカードです -->
-    <section class="card">
-      <div class="list-heading">
+    <section class="card" data-section-id="salesList">
+      <div class="section-header">
         <h2>登録済み一覧</h2>
-        <span id="itemCount">0件</span>
+        <div class="section-header-actions">
+          <span id="itemCount">0件</span>
+          <button class="section-toggle" type="button">− しまう</button>
+        </div>
       </div>
 
+      <div class="section-content">
       <!-- JavaScriptで商品カードをここに追加します -->
       <div id="salesList" class="sales-list"></div>
 
       <!-- 登録データがないときだけ表示します -->
       <p id="emptyMessage" class="empty-message">選択中の月に登録された商品はありません。</p>
+      </div>
     </section>
   </main>
 

@@ -29,12 +29,16 @@ const sortSelect = document.getElementById("sortSelect");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
+const COLLAPSE_STORAGE_KEY = "usedClothesCollapsedSections";
 
 // localStorageが使えるブラウザかどうかを確認します
 const canUseStorage = typeof localStorage !== "undefined";
 
 // 登録済みデータを入れておく配列です
 let sales = [];
+
+// セクションごとの折りたたみ状態を入れておくオブジェクトです
+let collapsedSections = {};
 
 // 編集中の商品idです。nullのときは新規登録モードです
 let editingSaleId = null;
@@ -509,6 +513,86 @@ function saveSales() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sales));
 }
 
+// localStorageからセクションの折りたたみ状態を読み込みます
+function loadCollapsedSections() {
+  if (!canUseStorage) {
+    collapsedSections = {};
+    return;
+  }
+
+  const savedState = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+
+  if (!savedState) {
+    collapsedSections = {};
+    return;
+  }
+
+  try {
+    collapsedSections = JSON.parse(savedState);
+  } catch (error) {
+    collapsedSections = {};
+  }
+}
+
+// セクションの折りたたみ状態をlocalStorageに保存します
+function saveCollapsedSections() {
+  if (!canUseStorage) {
+    return;
+  }
+
+  localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedSections));
+}
+
+// 1つのセクションを開く・閉じる表示に更新します
+function updateSectionCollapseView(section, isCollapsed) {
+  const content = section.querySelector(".section-content");
+  const toggleButton = section.querySelector(".section-toggle");
+
+  if (!content || !toggleButton) {
+    return;
+  }
+
+  content.hidden = isCollapsed;
+  section.classList.toggle("is-collapsed", isCollapsed);
+  toggleButton.textContent = isCollapsed ? "＋ 開く" : "− しまう";
+  toggleButton.setAttribute("aria-expanded", String(!isCollapsed));
+}
+
+// 指定したセクションidを開く・閉じる共通関数です
+function setSectionCollapsed(sectionId, isCollapsed) {
+  const section = document.querySelector(`[data-section-id="${sectionId}"]`);
+
+  if (!section) {
+    return;
+  }
+
+  collapsedSections[sectionId] = isCollapsed;
+  updateSectionCollapseView(section, isCollapsed);
+  saveCollapsedSections();
+}
+
+// data-section-idが付いた各セクションに、折りたたみボタンの処理を付けます
+function setupSectionToggles() {
+  loadCollapsedSections();
+
+  document.querySelectorAll("[data-section-id]").forEach(function (section) {
+    const sectionId = section.dataset.sectionId;
+    const toggleButton = section.querySelector(".section-toggle");
+    const isCollapsed = Boolean(collapsedSections[sectionId]);
+
+    updateSectionCollapseView(section, isCollapsed);
+
+    if (!toggleButton) {
+      return;
+    }
+
+    toggleButton.addEventListener("click", function () {
+      const nextCollapsedState = !Boolean(collapsedSections[sectionId]);
+      setSectionCollapsed(sectionId, nextCollapsedState);
+    });
+  });
+}
+
 // 画像プレビューと一時画像データを初期状態に戻します
 function resetImageInput() {
   resizedImageData = "";
@@ -570,6 +654,7 @@ function startEditSale(id) {
   submitButton.textContent = "更新する";
   editStatus.style.display = "block";
   cancelEditButton.style.display = "block";
+  setSectionCollapsed("salesForm", false);
   form.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -578,52 +663,55 @@ function createSaleCard(sale) {
   const card = document.createElement("article");
   card.className = "sale-card";
 
+  const compactRow = document.createElement("div");
+  compactRow.className = "sale-compact-row";
+
   // 画像ありならサムネイル、画像なしなら分かりやすい枠を表示します
   if (sale.imageData) {
     const image = document.createElement("img");
     image.className = "sale-image";
     image.src = sale.imageData;
     image.alt = `${sale.itemName}の商品画像`;
-    card.appendChild(image);
+    compactRow.appendChild(image);
   } else {
     const noImage = document.createElement("div");
     noImage.className = "sale-no-image";
     noImage.textContent = "画像なし";
-    card.appendChild(noImage);
+    compactRow.appendChild(noImage);
   }
 
-  const header = document.createElement("div");
-  header.className = "sale-card-header";
+  const mainInfo = document.createElement("div");
+  mainInfo.className = "sale-main-info";
+
+  const meta = document.createElement("div");
+  meta.className = "sale-meta";
 
   const date = document.createElement("span");
   date.className = "sale-date";
   date.textContent = sale.saleDate;
 
-  const title = document.createElement("h3");
-  title.className = "sale-title";
-  title.textContent = sale.itemName;
-
   const channel = document.createElement("span");
   channel.className = "sale-channel";
   channel.textContent = sale.salesChannel;
 
-  header.append(date, title, channel);
+  meta.append(date, channel);
 
-  const numbers = document.createElement("div");
-  numbers.className = "sale-numbers";
+  const title = document.createElement("h3");
+  title.className = "sale-title";
+  title.textContent = sale.itemName;
 
-  const numberItems = [
+  const compactNumbers = document.createElement("div");
+  compactNumbers.className = "sale-compact-numbers";
+
+  const compactNumberItems = [
     ["売値", formatYen(sale.salePrice)],
-    ["仕入れ値", formatYen(sale.costPrice)],
-    ["送料", formatYen(sale.shippingFee)],
-    ["手数料", formatYen(sale.fee)],
     ["利益", formatYen(sale.profit), sale.profit >= 0 ? "profit-plus" : "profit-minus"],
     ["利益率", formatPercent(sale.profitRate), sale.profit >= 0 ? "profit-plus" : "profit-minus"]
   ];
 
-  numberItems.forEach(function (item) {
+  compactNumberItems.forEach(function (item) {
     const box = document.createElement("div");
-    box.className = "number-box";
+    box.className = "compact-number";
 
     const label = document.createElement("span");
     label.textContent = item[0];
@@ -636,8 +724,45 @@ function createSaleCard(sale) {
     }
 
     box.append(label, value);
-    numbers.appendChild(box);
+    compactNumbers.appendChild(box);
   });
+
+  mainInfo.append(meta, title, compactNumbers);
+  compactRow.appendChild(mainInfo);
+
+  const details = document.createElement("div");
+  details.className = "sale-details";
+  details.hidden = true;
+
+  const detailNumbers = document.createElement("div");
+  detailNumbers.className = "sale-detail-numbers";
+
+  const numberItems = [
+    ["原価", formatYen(sale.costPrice)],
+    ["送料", formatYen(sale.shippingFee)],
+    ["手数料", formatYen(sale.fee)],
+    ["販売手数料率", formatPercent(Number(sale.feeRate || 0))]
+  ];
+
+  numberItems.forEach(function (item) {
+    const box = document.createElement("div");
+    box.className = "detail-number";
+
+    const label = document.createElement("span");
+    label.textContent = item[0];
+
+    const value = document.createElement("strong");
+    value.textContent = item[1];
+
+    if (item[2]) {
+      value.className = item[2];
+    }
+
+    box.append(label, value);
+    detailNumbers.appendChild(box);
+  });
+
+  details.appendChild(detailNumbers);
 
   const actionArea = document.createElement("div");
   actionArea.className = "sale-actions";
@@ -664,16 +789,27 @@ function createSaleCard(sale) {
 
   actionArea.append(editButton, deleteButton);
 
-  card.append(header, numbers);
+  const memo = document.createElement("p");
+  memo.className = "sale-memo";
+  memo.textContent = sale.memo || "メモなし";
+  details.appendChild(memo);
 
-  if (sale.memo) {
-    const memo = document.createElement("p");
-    memo.className = "sale-memo";
-    memo.textContent = sale.memo;
-    card.appendChild(memo);
-  }
+  details.appendChild(actionArea);
 
-  card.appendChild(actionArea);
+  const detailButton = document.createElement("button");
+  detailButton.className = "detail-toggle-button";
+  detailButton.type = "button";
+  detailButton.textContent = "詳細";
+
+  // 詳細ボタンで、原価・送料・手数料・メモ・編集削除ボタンを開閉します
+  detailButton.addEventListener("click", function () {
+    const isOpening = details.hidden;
+    details.hidden = !isOpening;
+    detailButton.textContent = isOpening ? "閉じる" : "詳細";
+  });
+
+  compactRow.appendChild(detailButton);
+  card.append(compactRow, details);
 
   return card;
 }
@@ -982,4 +1118,5 @@ form.addEventListener("submit", async function (event) {
 monthFilterInput.value = getCurrentMonthText();
 loadSales();
 resetForm();
+setupSectionToggles();
 renderDashboard();
