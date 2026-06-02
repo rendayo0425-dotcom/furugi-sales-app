@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>古着販売 利益計算アプリ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ページ全体を中央に配置するための入れ物です -->
+  <main class="app">
+    <!-- カード型の白いエリアです -->
+    <section class="card">
+      <h1>古着販売 利益計算</h1>
+      <p class="lead">売値や送料を入力して、販売後の利益を確認できます。</p>
+
+      <!-- 入力フォームです。JavaScriptで送信時の処理を行います -->
+      <form id="profitForm" class="form">
+        <label for="salePrice">
+          売値
+          <span class="input-wrap">
+            <input id="salePrice" type="number" min="0" step="1" placeholder="例: 3500" required>
+            <span>円</span>
+          </span>
+        </label>
+
+        <label for="costPrice">
+          仕入れ値
+          <span class="input-wrap">
+            <input id="costPrice" type="number" min="0" step="1" placeholder="例: 1200" required>
+            <span>円</span>
+          </span>
+        </label>
+
+        <label for="shippingFee">
+          送料
+          <span class="input-wrap">
+            <input id="shippingFee" type="number" min="0" step="1" placeholder="例: 750" required>
+            <span>円</span>
+          </span>
+        </label>
+
+        <label for="feeRate">
+          販売手数料率
+          <span class="input-wrap">
+            <input id="feeRate" type="number" min="0" step="0.1" value="10" required>
+            <span>%</span>
+          </span>
+        </label>
+
+        <button type="submit">計算する</button>
+      </form>
+
+      <!-- 計算結果を表示するエリアです -->
+      <section class="result" aria-live="polite">
+        <div class="result-row">
+          <span>手数料</span>
+          <strong id="feeResult">0円</strong>
+        </div>
+        <div class="result-row">
+          <span>利益</span>
+          <strong id="profitResult">0円</strong>
+        </div>
+        <div class="result-row">
+          <span>利益率</span>
+          <strong id="profitRateResult">0.0%</strong>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

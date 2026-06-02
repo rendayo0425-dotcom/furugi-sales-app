@@ -1,0 +1,145 @@
+/* すべての要素で、余白や枠線を含めてサイズ計算しやすくします */
+* {
+  box-sizing: border-box;
+}
+
+/* ページ全体の基本デザインです */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+  color: #1f2933;
+  background: #eef3f7;
+}
+
+/* アプリ全体を画面中央に置き、スマホでも余白を確保します */
+.app {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* 入力欄と結果をまとめるカードです */
+.card {
+  width: 100%;
+  max-width: 460px;
+  padding: 28px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(31, 41, 51, 0.12);
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.3;
+}
+
+.lead {
+  margin: 10px 0 24px;
+  color: #5f6c7b;
+  line-height: 1.6;
+}
+
+/* 入力フォームを縦に並べます */
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+/* 入力欄と単位を横並びにする枠です */
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid #c8d1dc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+input {
+  width: 100%;
+  min-height: 54px;
+  border: 0;
+  outline: 0;
+  font-size: 20px;
+  background: transparent;
+}
+
+.input-wrap span {
+  color: #5f6c7b;
+  font-weight: 700;
+}
+
+button {
+  min-height: 56px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #146c5f;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #0f5a50;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* 計算結果の表示エリアです */
+.result {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid #d9e1e8;
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.result-row span {
+  color: #5f6c7b;
+  font-weight: 700;
+}
+
+.result-row strong {
+  font-size: 22px;
+  text-align: right;
+}
+
+/* スマホでは文字と余白を少しだけ調整します */
+@media (max-width: 420px) {
+  .app {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .card {
+    padding: 22px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+}
