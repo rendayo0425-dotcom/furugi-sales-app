@@ -15,6 +15,43 @@
       <p class="lead">販売した商品を登録して、利益と利益率を一覧で確認できます。</p>
     </header>
 
+    <!-- 表示する月を選ぶカードです -->
+    <section class="card">
+      <label for="monthFilter">
+        表示する月
+        <input id="monthFilter" class="field" type="month" required>
+      </label>
+    </section>
+
+    <!-- 選択中の月の全体集計を表示するカードです -->
+    <section class="card summary-card">
+      <h2>全体集計</h2>
+      <div class="summary-grid">
+        <div class="summary-box">
+          <span>売上合計</span>
+          <strong id="totalSales">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>利益合計</span>
+          <strong id="totalProfit">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>平均利益率</span>
+          <strong id="averageProfitRate">0.0%</strong>
+        </div>
+        <div class="summary-box">
+          <span>登録件数</span>
+          <strong id="summaryCount">0件</strong>
+        </div>
+      </div>
+    </section>
+
+    <!-- 選択中の月の販路別集計を表示するカードです -->
+    <section class="card channel-summary-card">
+      <h2>販路別集計</h2>
+      <div id="channelSummaryList" class="channel-summary-list"></div>
+    </section>
+
     <!-- 売上を入力するカードです -->
     <section class="card">
       <h2>売上を登録</h2>
@@ -93,7 +130,7 @@
       <div id="salesList" class="sales-list"></div>
 
       <!-- 登録データがないときだけ表示します -->
-      <p id="emptyMessage" class="empty-message">まだ登録された商品はありません。</p>
+      <p id="emptyMessage" class="empty-message">選択中の月に登録された商品はありません。</p>
     </section>
   </main>
 

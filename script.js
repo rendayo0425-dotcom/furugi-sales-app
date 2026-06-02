@@ -4,6 +4,12 @@ const salesList = document.getElementById("salesList");
 const emptyMessage = document.getElementById("emptyMessage");
 const itemCount = document.getElementById("itemCount");
 const saleDateInput = document.getElementById("saleDate");
+const monthFilterInput = document.getElementById("monthFilter");
+const totalSales = document.getElementById("totalSales");
+const totalProfit = document.getElementById("totalProfit");
+const averageProfitRate = document.getElementById("averageProfitRate");
+const summaryCount = document.getElementById("summaryCount");
+const channelSummaryList = document.getElementById("channelSummaryList");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -13,6 +19,9 @@ const canUseStorage = typeof localStorage !== "undefined";
 
 // 登録済みデータを入れておく配列です
 let sales = [];
+
+// 販路別集計で表示する販路の一覧です
+const salesChannels = ["メルカリメイン", "メルカリサブ", "ヤフー", "ラクマ"];
 
 // 数字を「1,000円」のように見やすい円表示へ変換します
 function formatYen(value) {
@@ -34,6 +43,11 @@ function getTodayText() {
   return `${year}-${month}-${day}`;
 }
 
+// 今日の月を「2026-06」のようなinput type="month"用の形にします
+function getCurrentMonthText() {
+  return getTodayText().slice(0, 7);
+}
+
 // 入力値から手数料、利益、利益率を計算します
 function calculateProfit(salePrice, costPrice, shippingFee, feeRate) {
   const fee = salePrice * feeRate / 100;
@@ -44,6 +58,44 @@ function calculateProfit(salePrice, costPrice, shippingFee, feeRate) {
     fee,
     profit,
     profitRate
+  };
+}
+
+// 選択中の月に含まれるデータだけを取り出します
+function getFilteredSales() {
+  const selectedMonth = monthFilterInput.value;
+
+  return sales.filter(function (sale) {
+    return sale.saleDate && sale.saleDate.slice(0, 7) === selectedMonth;
+  });
+}
+
+// 集計に使う合計値や平均値を計算します
+function calculateSummary(targetSales) {
+  const salesTotal = targetSales.reduce(function (total, sale) {
+    return total + sale.salePrice;
+  }, 0);
+
+  const profitTotal = targetSales.reduce(function (total, sale) {
+    return total + sale.profit;
+  }, 0);
+
+  // 平均利益率は、各商品の利益率を足して件数で割っています
+  const profitRateTotal = targetSales.reduce(function (total, sale) {
+    return total + sale.profitRate;
+  }, 0);
+
+  const averageRate = targetSales.length === 0 ? 0 : profitRateTotal / targetSales.length;
+
+  // 販路別集計では、利益合計を売上合計で割った利益率も使います
+  const totalProfitRate = salesTotal === 0 ? 0 : profitTotal / salesTotal * 100;
+
+  return {
+    salesTotal,
+    profitTotal,
+    averageRate,
+    totalProfitRate,
+    count: targetSales.length
   };
 }
 
@@ -145,15 +197,80 @@ function createSaleCard(sale) {
   return card;
 }
 
-// 登録済み一覧を画面に描画します
-function renderSales() {
-  salesList.innerHTML = "";
-  itemCount.textContent = `${sales.length}件`;
-  emptyMessage.style.display = sales.length === 0 ? "block" : "none";
+// 全体集計を画面に表示します
+function renderTotalSummary(filteredSales) {
+  const summary = calculateSummary(filteredSales);
 
-  sales.forEach(function (sale) {
+  totalSales.textContent = formatYen(summary.salesTotal);
+  totalProfit.textContent = formatYen(summary.profitTotal);
+  averageProfitRate.textContent = formatPercent(summary.averageRate);
+  summaryCount.textContent = `${summary.count}件`;
+}
+
+// 販路別集計を画面に表示します
+function renderChannelSummary(filteredSales) {
+  channelSummaryList.innerHTML = "";
+
+  salesChannels.forEach(function (channelName) {
+    const channelSales = filteredSales.filter(function (sale) {
+      return sale.salesChannel === channelName;
+    });
+
+    const summary = calculateSummary(channelSales);
+    const item = document.createElement("article");
+    item.className = "channel-summary-item";
+
+    const title = document.createElement("h3");
+    title.className = "channel-summary-title";
+    title.textContent = channelName;
+
+    const numberGrid = document.createElement("div");
+    numberGrid.className = "channel-number-grid";
+
+    const numberItems = [
+      ["売上合計", formatYen(summary.salesTotal)],
+      ["利益合計", formatYen(summary.profitTotal)],
+      ["平均利益率", formatPercent(summary.totalProfitRate)],
+      ["登録件数", `${summary.count}件`]
+    ];
+
+    numberItems.forEach(function (numberItem) {
+      const box = document.createElement("div");
+      box.className = "channel-number";
+
+      const label = document.createElement("span");
+      label.textContent = numberItem[0];
+
+      const value = document.createElement("strong");
+      value.textContent = numberItem[1];
+
+      box.append(label, value);
+      numberGrid.appendChild(box);
+    });
+
+    item.append(title, numberGrid);
+    channelSummaryList.appendChild(item);
+  });
+}
+
+// 登録済み一覧を画面に描画します
+function renderSalesList(filteredSales) {
+  salesList.innerHTML = "";
+  itemCount.textContent = `${filteredSales.length}件`;
+  emptyMessage.style.display = filteredSales.length === 0 ? "block" : "none";
+
+  filteredSales.forEach(function (sale) {
     salesList.appendChild(createSaleCard(sale));
   });
+}
+
+// 選択中の月に合わせて、集計と一覧をまとめて更新します
+function renderDashboard() {
+  const filteredSales = getFilteredSales();
+
+  renderTotalSummary(filteredSales);
+  renderChannelSummary(filteredSales);
+  renderSalesList(filteredSales);
 }
 
 // 指定されたidの商品を削除します
@@ -163,8 +280,13 @@ function deleteSale(id) {
   });
 
   saveSales();
-  renderSales();
+  renderDashboard();
 }
+
+// 月を変更したら、一覧と集計を自動で切り替えます
+monthFilterInput.addEventListener("change", function () {
+  renderDashboard();
+});
 
 // フォームの「登録する」ボタンが押されたときに実行されます
 form.addEventListener("submit", function (event) {
@@ -202,7 +324,7 @@ form.addEventListener("submit", function (event) {
   // 新しいデータを先頭に追加して、保存と再表示をします
   sales.unshift(sale);
   saveSales();
-  renderSales();
+  renderDashboard();
 
   // 次の商品を入力しやすいようにフォームを初期状態へ戻します
   form.reset();
@@ -212,5 +334,6 @@ form.addEventListener("submit", function (event) {
 
 // ページを開いたときに、日付の初期値と保存済みデータを準備します
 saleDateInput.value = getTodayText();
+monthFilterInput.value = getCurrentMonthText();
 loadSales();
-renderSales();
+renderDashboard();
