@@ -152,6 +152,18 @@ textarea.field {
   object-fit: cover;
 }
 
+.image-delete-button {
+  display: none;
+  min-height: 46px;
+  color: #b42318;
+  background: #fff1f0;
+  font-size: 15px;
+}
+
+.image-delete-button:hover {
+  background: #ffe0de;
+}
+
 /* 入力欄と単位を横並びにする枠です */
 .input-wrap {
   display: flex;

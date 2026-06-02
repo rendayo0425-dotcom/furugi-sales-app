@@ -4,6 +4,7 @@ const salesList = document.getElementById("salesList");
 const emptyMessage = document.getElementById("emptyMessage");
 const itemCount = document.getElementById("itemCount");
 const saleDateInput = document.getElementById("saleDate");
+const purchaseDateInput = document.getElementById("purchaseDate");
 const monthFilterInput = document.getElementById("monthFilter");
 const totalSales = document.getElementById("totalSales");
 const totalCost = document.getElementById("totalCost");
@@ -18,6 +19,7 @@ const summaryYearSelect = document.getElementById("summaryYearSelect");
 const itemImageInput = document.getElementById("itemImage");
 const imagePreviewWrap = document.getElementById("imagePreviewWrap");
 const imagePreview = document.getElementById("imagePreview");
+const removeImageButton = document.getElementById("removeImageButton");
 const formTitle = document.getElementById("formTitle");
 const editStatus = document.getElementById("editStatus");
 const submitButton = document.getElementById("submitButton");
@@ -56,6 +58,9 @@ let imageResizePromise = Promise.resolve("");
 // 画像を選び直したとき、古いリサイズ結果を使わないための番号です
 let imageSelectionId = 0;
 
+// 編集中に「既存画像を削除する」と決めたかどうかを覚えておきます
+let imageDeleteRequested = false;
+
 // 販路別集計で表示する販路の一覧です
 const salesChannels = ["メルカリメイン", "メルカリサブ", "ヤフー", "ラクマ"];
 
@@ -63,6 +68,7 @@ const salesChannels = ["メルカリメイン", "メルカリサブ", "ヤフー
 const csvHeaders = [
   "id",
   "販売日",
+  "仕入日",
   "販路",
   "商品名",
   "売値",
@@ -72,6 +78,7 @@ const csvHeaders = [
   "手数料",
   "利益",
   "利益率",
+  "販売日数",
   "メモ"
 ];
 
@@ -98,6 +105,33 @@ function getTodayText() {
 // 今日の月を「2026-06」のようなinput type="month"用の形にします
 function getCurrentMonthText() {
   return getTodayText().slice(0, 7);
+}
+
+// 日付文字列を、時刻のズレが出にくい形でDateに変換します
+function parseDateText(dateText) {
+  if (!dateText) {
+    return null;
+  }
+
+  return new Date(`${dateText}T00:00:00`);
+}
+
+// 仕入日から販売日までの日数を計算します。仕入日がない場合はnullにします
+function calculateSaleDays(saleDate, purchaseDate) {
+  const saleDateValue = parseDateText(saleDate);
+  const purchaseDateValue = parseDateText(purchaseDate);
+
+  if (!saleDateValue || !purchaseDateValue) {
+    return null;
+  }
+
+  const oneDayMilliseconds = 24 * 60 * 60 * 1000;
+  return Math.round((saleDateValue - purchaseDateValue) / oneDayMilliseconds);
+}
+
+// 販売日数を一覧で読みやすい文字にします
+function formatSaleDays(saleDays) {
+  return Number.isFinite(saleDays) ? `${saleDays}日` : "-";
 }
 
 // 入力値から手数料、利益、利益率を計算します
@@ -143,6 +177,10 @@ function validateSaleInput(values) {
     errors.push("販売日を入力してください。");
   }
 
+  if (values.purchaseDate && values.saleDate && calculateSaleDays(values.saleDate, values.purchaseDate) < 0) {
+    errors.push("仕入日は販売日以前の日付を入力してください。");
+  }
+
   if (!values.salesChannel) {
     errors.push("販路を選択してください。");
   }
@@ -178,9 +216,14 @@ function escapeCsvValue(value) {
 
 // 1件の商品データをCSVの1行分に変換します
 function saleToCsvRow(sale) {
+  const saleDays = Number.isFinite(sale.saleDays)
+    ? sale.saleDays
+    : calculateSaleDays(sale.saleDate, sale.purchaseDate);
+
   return [
     sale.id,
     sale.saleDate,
+    sale.purchaseDate || "",
     sale.salesChannel,
     sale.itemName,
     sale.salePrice,
@@ -190,6 +233,7 @@ function saleToCsvRow(sale) {
     sale.fee,
     sale.profit,
     sale.profitRate,
+    formatSaleDays(saleDays),
     sale.memo
   ].map(escapeCsvValue).join(",");
 }
@@ -276,10 +320,14 @@ function csvRowToSale(headerIndexes, row) {
   const feeRate = Number(row[headerIndexes["販売手数料率"]] || 0);
   const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
   const importedId = Number(row[headerIndexes.id]);
+  const saleDate = row[headerIndexes["販売日"]] || getTodayText();
+  const purchaseDate = row[headerIndexes["仕入日"]] || "";
+  const saleDays = calculateSaleDays(saleDate, purchaseDate);
 
   return {
     id: importedId || Date.now() + Math.floor(Math.random() * 100000),
-    saleDate: row[headerIndexes["販売日"]] || getTodayText(),
+    saleDate,
+    purchaseDate,
     salesChannel: row[headerIndexes["販路"]] || "メルカリメイン",
     itemName: row[headerIndexes["商品名"]] || "名称未設定",
     salePrice,
@@ -289,6 +337,7 @@ function csvRowToSale(headerIndexes, row) {
     fee: Number(row[headerIndexes["手数料"]]) || calculated.fee,
     profit: Number(row[headerIndexes["利益"]]) || calculated.profit,
     profitRate: Number(row[headerIndexes["利益率"]]) || calculated.profitRate,
+    saleDays,
     imageData: "",
     memo: row[headerIndexes["メモ"]] || ""
   };
@@ -723,9 +772,12 @@ function resetImageInput() {
   resizedImageData = "";
   imageResizePromise = Promise.resolve("");
   imageSelectionId += 1;
+  imageDeleteRequested = false;
   imagePreviewWrap.style.display = "none";
   imagePreview.removeAttribute("src");
   itemImageInput.value = "";
+  removeImageButton.style.display = "none";
+  removeImageButton.disabled = true;
 }
 
 // フォームを新規登録モードに戻します
@@ -733,6 +785,7 @@ function resetForm() {
   form.reset();
   clearFormErrors();
   saleDateInput.value = getTodayText();
+  purchaseDateInput.value = "";
   document.getElementById("feeRate").value = "10";
   editingSaleId = null;
   formTitle.textContent = "売上を登録";
@@ -754,8 +807,10 @@ function startEditSale(id) {
 
   clearFormErrors();
   editingSaleId = id;
+  imageDeleteRequested = false;
   imageSelectionId += 1;
   document.getElementById("saleDate").value = sale.saleDate;
+  document.getElementById("purchaseDate").value = sale.purchaseDate || "";
   document.getElementById("salesChannel").value = sale.salesChannel;
   document.getElementById("itemName").value = sale.itemName;
   document.getElementById("salePrice").value = sale.salePrice;
@@ -772,9 +827,13 @@ function startEditSale(id) {
   if (resizedImageData) {
     imagePreview.src = resizedImageData;
     imagePreviewWrap.style.display = "block";
+    removeImageButton.style.display = "block";
+    removeImageButton.disabled = false;
   } else {
     imagePreviewWrap.style.display = "none";
     imagePreview.removeAttribute("src");
+    removeImageButton.style.display = "none";
+    removeImageButton.disabled = true;
   }
 
   formTitle.textContent = "売上を編集";
@@ -789,6 +848,9 @@ function startEditSale(id) {
 function createSaleCard(sale) {
   const card = document.createElement("article");
   card.className = "sale-card";
+  const saleDays = Number.isFinite(sale.saleDays)
+    ? sale.saleDays
+    : calculateSaleDays(sale.saleDate, sale.purchaseDate);
 
   const compactRow = document.createElement("div");
   compactRow.className = "sale-compact-row";
@@ -865,6 +927,8 @@ function createSaleCard(sale) {
   detailNumbers.className = "sale-detail-numbers";
 
   const numberItems = [
+    ["仕入日", sale.purchaseDate || "-"],
+    ["販売日数", formatSaleDays(saleDays)],
     ["原価", formatYen(sale.costPrice)],
     ["送料", formatYen(sale.shippingFee)],
     ["手数料", formatYen(sale.fee)],
@@ -1187,6 +1251,19 @@ csvFileInput.addEventListener("change", function () {
   importCsv(file, importMode);
 });
 
+// 編集中に画像を消したい場合は、削除予約をしてプレビューも消します
+removeImageButton.addEventListener("click", function () {
+  imageDeleteRequested = true;
+  resizedImageData = "";
+  imageResizePromise = Promise.resolve("");
+  imageSelectionId += 1;
+  itemImageInput.value = "";
+  imagePreviewWrap.style.display = "none";
+  imagePreview.removeAttribute("src");
+  removeImageButton.style.display = "none";
+  removeImageButton.disabled = true;
+});
+
 // 画像を選んだら、リサイズした画像を保存用に準備してプレビューも表示します
 itemImageInput.addEventListener("change", async function () {
   imageSelectionId += 1;
@@ -1198,9 +1275,12 @@ itemImageInput.addEventListener("change", async function () {
     imageResizePromise = Promise.resolve("");
     imagePreviewWrap.style.display = "none";
     imagePreview.removeAttribute("src");
+    removeImageButton.style.display = "none";
+    removeImageButton.disabled = true;
     return;
   }
 
+  imageDeleteRequested = false;
   imageResizePromise = resizeImage(file);
 
   try {
@@ -1214,11 +1294,15 @@ itemImageInput.addEventListener("change", async function () {
     resizedImageData = imageData;
     imagePreview.src = resizedImageData;
     imagePreviewWrap.style.display = "block";
+    removeImageButton.style.display = "block";
+    removeImageButton.disabled = false;
   } catch (error) {
     resizedImageData = "";
     imageResizePromise = Promise.resolve("");
     imagePreviewWrap.style.display = "none";
     imagePreview.removeAttribute("src");
+    removeImageButton.style.display = "none";
+    removeImageButton.disabled = true;
     alert("画像を読み込めませんでした。別の画像を選んでください。");
   }
 });
@@ -1238,6 +1322,7 @@ form.addEventListener("submit", async function (event) {
 
   // 入力された値を取得します
   const saleDate = document.getElementById("saleDate").value;
+  const purchaseDate = document.getElementById("purchaseDate").value;
   const salesChannel = document.getElementById("salesChannel").value;
   const itemName = document.getElementById("itemName").value.trim();
   const salePrice = Number(document.getElementById("salePrice").value);
@@ -1247,6 +1332,7 @@ form.addEventListener("submit", async function (event) {
   const memo = document.getElementById("memo").value.trim();
   const errors = validateSaleInput({
     saleDate,
+    purchaseDate,
     salesChannel,
     itemName,
     salePrice,
@@ -1264,11 +1350,13 @@ form.addEventListener("submit", async function (event) {
   clearFormErrors();
 
   const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
+  const saleDays = calculateSaleDays(saleDate, purchaseDate);
 
   // 登録または更新する1件分のデータを作ります
   const sale = {
     id: editingSaleId || Date.now(),
     saleDate,
+    purchaseDate,
     salesChannel,
     itemName,
     salePrice,
@@ -1278,7 +1366,8 @@ form.addEventListener("submit", async function (event) {
     fee: calculated.fee,
     profit: calculated.profit,
     profitRate: calculated.profitRate,
-    imageData: resizedImageData,
+    saleDays,
+    imageData: imageDeleteRequested ? "" : resizedImageData,
     memo
   };
 

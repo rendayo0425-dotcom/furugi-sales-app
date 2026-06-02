@@ -183,6 +183,12 @@
           <input id="saleDate" class="field" type="date" required>
         </label>
 
+        <label for="purchaseDate">
+          仕入日
+          <!-- 任意入力です。入力された場合は販売日との差から販売日数を計算します -->
+          <input id="purchaseDate" class="field" type="date">
+        </label>
+
         <label for="salesChannel">
           販路
           <select id="salesChannel" class="field" required>
@@ -208,6 +214,9 @@
         <div id="imagePreviewWrap" class="image-preview-wrap">
           <img id="imagePreview" class="image-preview" alt="選択した商品画像のプレビュー">
         </div>
+
+        <!-- 編集中に既存画像を消したいときだけ使うボタンです -->
+        <button id="removeImageButton" class="image-delete-button" type="button">画像を削除</button>
 
         <label for="salePrice">
           売値
