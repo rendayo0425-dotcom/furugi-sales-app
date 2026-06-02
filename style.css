@@ -218,6 +218,17 @@ button:active {
   height: 18px;
 }
 
+/* 一覧の検索・絞り込み・並び替えをまとめるカードです */
+.filter-card {
+  border-top: 5px solid #0f766e;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
 /* 全体集計のカードです */
 .summary-card {
   border-top: 5px solid #146c5f;
@@ -225,7 +236,7 @@ button:active {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -458,6 +469,7 @@ button:active {
 
   .summary-grid,
   .channel-number-grid,
+  .filter-grid,
   .form-actions,
   .sale-actions {
     grid-template-columns: 1fr;

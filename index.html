@@ -23,6 +23,39 @@
       </label>
     </section>
 
+    <!-- 一覧の検索・絞り込み・並び替えを行う表示設定です -->
+    <section class="card filter-card">
+      <h2>表示設定</h2>
+      <div class="filter-grid">
+        <label for="searchInput">
+          商品名・メモ検索
+          <input id="searchInput" class="field" type="search" placeholder="キーワードを入力">
+        </label>
+
+        <label for="channelFilter">
+          販路で絞り込み
+          <select id="channelFilter" class="field">
+            <option value="all">すべて</option>
+            <option value="メルカリメイン">メルカリメイン</option>
+            <option value="メルカリサブ">メルカリサブ</option>
+            <option value="ヤフー">ヤフー</option>
+            <option value="ラクマ">ラクマ</option>
+          </select>
+        </label>
+
+        <label for="sortSelect">
+          並び替え
+          <select id="sortSelect" class="field">
+            <option value="dateDesc">販売日が新しい順</option>
+            <option value="dateAsc">販売日が古い順</option>
+            <option value="priceDesc">売値が高い順</option>
+            <option value="profitDesc">利益が高い順</option>
+            <option value="profitRateDesc">利益率が高い順</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
     <!-- CSVの出力と読み込みを行う管理メニューです -->
     <section class="card csv-card">
       <h2>データ管理</h2>
@@ -58,6 +91,18 @@
         <div class="summary-box">
           <span>売上合計</span>
           <strong id="totalSales">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>原価合計</span>
+          <strong id="totalCost">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>送料合計</span>
+          <strong id="totalShipping">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>手数料合計</span>
+          <strong id="totalFee">0円</strong>
         </div>
         <div class="summary-box">
           <span>利益合計</span>

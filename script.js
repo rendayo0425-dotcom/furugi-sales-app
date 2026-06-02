@@ -6,6 +6,9 @@ const itemCount = document.getElementById("itemCount");
 const saleDateInput = document.getElementById("saleDate");
 const monthFilterInput = document.getElementById("monthFilter");
 const totalSales = document.getElementById("totalSales");
+const totalCost = document.getElementById("totalCost");
+const totalShipping = document.getElementById("totalShipping");
+const totalFee = document.getElementById("totalFee");
 const totalProfit = document.getElementById("totalProfit");
 const averageProfitRate = document.getElementById("averageProfitRate");
 const summaryCount = document.getElementById("summaryCount");
@@ -19,6 +22,9 @@ const submitButton = document.getElementById("submitButton");
 const cancelEditButton = document.getElementById("cancelEditButton");
 const exportCsvButton = document.getElementById("exportCsvButton");
 const csvFileInput = document.getElementById("csvFileInput");
+const searchInput = document.getElementById("searchInput");
+const channelFilter = document.getElementById("channelFilter");
+const sortSelect = document.getElementById("sortSelect");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -358,6 +364,47 @@ function getFilteredSales() {
   });
 }
 
+// 一覧表示用に、検索・販路絞り込み・並び替えを適用します
+function getVisibleSales(monthlySales) {
+  const keyword = searchInput.value.trim().toLowerCase();
+  const selectedChannel = channelFilter.value;
+  const selectedSort = sortSelect.value;
+
+  let visibleSales = monthlySales.filter(function (sale) {
+    const itemName = String(sale.itemName || "").toLowerCase();
+    const memo = String(sale.memo || "").toLowerCase();
+    const matchesKeyword = keyword === "" || itemName.includes(keyword) || memo.includes(keyword);
+    const matchesChannel = selectedChannel === "all" || sale.salesChannel === selectedChannel;
+
+    return matchesKeyword && matchesChannel;
+  });
+
+  // 元の配列を直接並び替えないよう、コピーを作ってからsortします
+  visibleSales = [...visibleSales].sort(function (firstSale, secondSale) {
+    if (selectedSort === "dateAsc") {
+      const dateCompare = String(firstSale.saleDate).localeCompare(String(secondSale.saleDate));
+      return dateCompare || Number(firstSale.id || 0) - Number(secondSale.id || 0);
+    }
+
+    if (selectedSort === "priceDesc") {
+      return Number(secondSale.salePrice || 0) - Number(firstSale.salePrice || 0);
+    }
+
+    if (selectedSort === "profitDesc") {
+      return Number(secondSale.profit || 0) - Number(firstSale.profit || 0);
+    }
+
+    if (selectedSort === "profitRateDesc") {
+      return Number(secondSale.profitRate || 0) - Number(firstSale.profitRate || 0);
+    }
+
+    const dateCompare = String(secondSale.saleDate).localeCompare(String(firstSale.saleDate));
+    return dateCompare || Number(secondSale.id || 0) - Number(firstSale.id || 0);
+  });
+
+  return visibleSales;
+}
+
 // 集計に使う合計値や平均値を計算します
 function calculateSummary(targetSales) {
   const salesTotal = targetSales.reduce(function (total, sale) {
@@ -598,6 +645,9 @@ function renderTotalSummary(filteredSales) {
   const summary = calculateSummary(filteredSales);
 
   totalSales.textContent = formatYen(summary.salesTotal);
+  totalCost.textContent = formatYen(summary.costTotal);
+  totalShipping.textContent = formatYen(summary.shippingTotal);
+  totalFee.textContent = formatYen(summary.feeTotal);
   totalProfit.textContent = formatYen(summary.profitTotal);
   averageProfitRate.textContent = formatPercent(summary.averageRate);
   summaryCount.textContent = `${summary.count}件`;
@@ -666,10 +716,11 @@ function renderSalesList(filteredSales) {
 // 選択中の月に合わせて、集計と一覧をまとめて更新します
 function renderDashboard() {
   const filteredSales = getFilteredSales();
+  const visibleSales = getVisibleSales(filteredSales);
 
   renderTotalSummary(filteredSales);
   renderChannelSummary(filteredSales);
-  renderSalesList(filteredSales);
+  renderSalesList(visibleSales);
 }
 
 // 指定されたidの商品を削除します
@@ -688,6 +739,21 @@ function deleteSale(id) {
 
 // 月を変更したら、一覧と集計を自動で切り替えます
 monthFilterInput.addEventListener("change", function () {
+  renderDashboard();
+});
+
+// 検索キーワードを入力したら、一覧だけを自動で絞り込みます
+searchInput.addEventListener("input", function () {
+  renderDashboard();
+});
+
+// 販路を選び直したら、一覧だけを自動で絞り込みます
+channelFilter.addEventListener("change", function () {
+  renderDashboard();
+});
+
+// 並び替え条件を選び直したら、一覧だけを並び替えます
+sortSelect.addEventListener("change", function () {
   renderDashboard();
 });
 
