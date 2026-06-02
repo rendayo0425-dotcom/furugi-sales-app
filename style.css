@@ -411,6 +411,43 @@ button:active {
   font-size: 22px;
 }
 
+/* 選択中の月の平均値や粗利率を表示するKPIカードです */
+.kpi-card {
+  border-top: 5px solid #5b6f2a;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi-box {
+  padding: 14px;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.kpi-box span {
+  display: block;
+  margin-bottom: 6px;
+  color: #5f6c7b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kpi-box strong {
+  font-size: 20px;
+}
+
+.kpi-highlight {
+  background: #edf7f4;
+}
+
+.kpi-highlight strong {
+  color: #146c5f;
+}
+
 /* 販路別集計のカードです */
 .channel-summary-card {
   border-top: 5px solid #6f5adc;
@@ -684,6 +721,7 @@ button:active {
   }
 
   .summary-grid,
+  .kpi-grid,
   .channel-number-grid,
   .filter-grid,
   .monthly-number-grid,

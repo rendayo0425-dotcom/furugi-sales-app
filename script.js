@@ -13,6 +13,13 @@ const totalFee = document.getElementById("totalFee");
 const totalProfit = document.getElementById("totalProfit");
 const averageProfitRate = document.getElementById("averageProfitRate");
 const summaryCount = document.getElementById("summaryCount");
+const averageSalePrice = document.getElementById("averageSalePrice");
+const averageCostPrice = document.getElementById("averageCostPrice");
+const averageShippingFee = document.getElementById("averageShippingFee");
+const averageFee = document.getElementById("averageFee");
+const averageProfit = document.getElementById("averageProfit");
+const averageSaleDays = document.getElementById("averageSaleDays");
+const grossProfitRate = document.getElementById("grossProfitRate");
 const channelSummaryList = document.getElementById("channelSummaryList");
 const monthlySummaryList = document.getElementById("monthlySummaryList");
 const summaryYearSelect = document.getElementById("summaryYearSelect");
@@ -132,6 +139,11 @@ function calculateSaleDays(saleDate, purchaseDate) {
 // 販売日数を一覧で読みやすい文字にします
 function formatSaleDays(saleDays) {
   return Number.isFinite(saleDays) ? `${saleDays}日` : "-";
+}
+
+// 平均販売日数を、小数1桁までの見やすい表示にします
+function formatAverageSaleDays(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)}日` : "-";
 }
 
 // 入力値から手数料、利益、利益率を計算します
@@ -665,6 +677,34 @@ function calculateSummary(targetSales) {
   };
 }
 
+// 選択中の月の平均値や粗利率を計算します
+function calculateKpi(targetSales) {
+  const summary = calculateSummary(targetSales);
+  const count = summary.count;
+  const saleDaysValues = targetSales
+    .map(function (sale) {
+      return Number.isFinite(sale.saleDays)
+        ? sale.saleDays
+        : calculateSaleDays(sale.saleDate, sale.purchaseDate);
+    })
+    .filter(function (saleDays) {
+      return Number.isFinite(saleDays);
+    });
+  const saleDaysTotal = saleDaysValues.reduce(function (total, saleDays) {
+    return total + saleDays;
+  }, 0);
+
+  return {
+    averageSalePrice: count === 0 ? 0 : summary.salesTotal / count,
+    averageCostPrice: count === 0 ? 0 : summary.costTotal / count,
+    averageShippingFee: count === 0 ? 0 : summary.shippingTotal / count,
+    averageFee: count === 0 ? 0 : summary.feeTotal / count,
+    averageProfit: count === 0 ? 0 : summary.profitTotal / count,
+    averageSaleDays: saleDaysValues.length === 0 ? null : saleDaysTotal / saleDaysValues.length,
+    grossProfitRate: summary.salesTotal === 0 ? 0 : summary.profitTotal / summary.salesTotal * 100
+  };
+}
+
 // localStorageから登録済みデータを読み込みます
 function loadSales() {
   if (!canUseStorage) {
@@ -1018,6 +1058,19 @@ function renderTotalSummary(filteredSales) {
   summaryCount.textContent = `${summary.count}件`;
 }
 
+// 選択中の月のKPIを画面に表示します
+function renderKpiSummary(filteredSales) {
+  const kpi = calculateKpi(filteredSales);
+
+  averageSalePrice.textContent = formatYen(kpi.averageSalePrice);
+  averageCostPrice.textContent = formatYen(kpi.averageCostPrice);
+  averageShippingFee.textContent = formatYen(kpi.averageShippingFee);
+  averageFee.textContent = formatYen(kpi.averageFee);
+  averageProfit.textContent = formatYen(kpi.averageProfit);
+  averageSaleDays.textContent = formatAverageSaleDays(kpi.averageSaleDays);
+  grossProfitRate.textContent = formatPercent(kpi.grossProfitRate);
+}
+
 // 販路別集計を画面に表示します
 function renderChannelSummary(filteredSales) {
   channelSummaryList.innerHTML = "";
@@ -1152,6 +1205,7 @@ function renderDashboard() {
 
   renderMonthlySummary();
   renderTotalSummary(filteredSales);
+  renderKpiSummary(filteredSales);
   renderChannelSummary(filteredSales);
   renderSalesList(visibleSales);
 }
