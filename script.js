@@ -361,16 +361,28 @@ function getFilteredSales() {
 // 集計に使う合計値や平均値を計算します
 function calculateSummary(targetSales) {
   const salesTotal = targetSales.reduce(function (total, sale) {
-    return total + sale.salePrice;
+    return total + Number(sale.salePrice || 0);
+  }, 0);
+
+  const costTotal = targetSales.reduce(function (total, sale) {
+    return total + Number(sale.costPrice || 0);
+  }, 0);
+
+  const shippingTotal = targetSales.reduce(function (total, sale) {
+    return total + Number(sale.shippingFee || 0);
+  }, 0);
+
+  const feeTotal = targetSales.reduce(function (total, sale) {
+    return total + Number(sale.fee || 0);
   }, 0);
 
   const profitTotal = targetSales.reduce(function (total, sale) {
-    return total + sale.profit;
+    return total + Number(sale.profit || 0);
   }, 0);
 
   // 平均利益率は、各商品の利益率を足して件数で割っています
   const profitRateTotal = targetSales.reduce(function (total, sale) {
-    return total + sale.profitRate;
+    return total + Number(sale.profitRate || 0);
   }, 0);
 
   const averageRate = targetSales.length === 0 ? 0 : profitRateTotal / targetSales.length;
@@ -380,6 +392,9 @@ function calculateSummary(targetSales) {
 
   return {
     salesTotal,
+    costTotal,
+    shippingTotal,
+    feeTotal,
     profitTotal,
     averageRate,
     totalProfitRate,
@@ -610,6 +625,9 @@ function renderChannelSummary(filteredSales) {
 
     const numberItems = [
       ["売上合計", formatYen(summary.salesTotal)],
+      ["原価合計", formatYen(summary.costTotal)],
+      ["送料合計", formatYen(summary.shippingTotal)],
+      ["手数料合計", formatYen(summary.feeTotal)],
       ["利益合計", formatYen(summary.profitTotal)],
       ["平均利益率", formatPercent(summary.totalProfitRate)],
       ["登録件数", `${summary.count}件`]
