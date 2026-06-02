@@ -22,7 +22,10 @@ const formTitle = document.getElementById("formTitle");
 const editStatus = document.getElementById("editStatus");
 const submitButton = document.getElementById("submitButton");
 const cancelEditButton = document.getElementById("cancelEditButton");
+const formError = document.getElementById("formError");
 const exportCsvButton = document.getElementById("exportCsvButton");
+const exportMonthCsvButton = document.getElementById("exportMonthCsvButton");
+const deleteAllDataButton = document.getElementById("deleteAllDataButton");
 const csvFileInput = document.getElementById("csvFileInput");
 const searchInput = document.getElementById("searchInput");
 const channelFilter = document.getElementById("channelFilter");
@@ -110,6 +113,63 @@ function calculateProfit(salePrice, costPrice, shippingFee, feeRate) {
   };
 }
 
+// フォーム上部のエラー表示を消します
+function clearFormErrors() {
+  formError.style.display = "none";
+  formError.innerHTML = "";
+}
+
+// 入力エラーを日本語でまとめて表示します
+function showFormErrors(errors) {
+  const list = document.createElement("ul");
+
+  errors.forEach(function (errorText) {
+    const item = document.createElement("li");
+    item.textContent = errorText;
+    list.appendChild(item);
+  });
+
+  formError.innerHTML = "";
+  formError.appendChild(list);
+  formError.style.display = "block";
+  formError.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// 登録・更新前に、必須項目と数値の範囲を確認します
+function validateSaleInput(values) {
+  const errors = [];
+
+  if (!values.saleDate) {
+    errors.push("販売日を入力してください。");
+  }
+
+  if (!values.salesChannel) {
+    errors.push("販路を選択してください。");
+  }
+
+  if (!values.itemName) {
+    errors.push("商品名を入力してください。");
+  }
+
+  if (Number.isNaN(values.salePrice) || values.salePrice < 1) {
+    errors.push("売値は1円以上で入力してください。");
+  }
+
+  if (Number.isNaN(values.costPrice) || values.costPrice < 0) {
+    errors.push("仕入れ値は0円以上で入力してください。");
+  }
+
+  if (Number.isNaN(values.shippingFee) || values.shippingFee < 0) {
+    errors.push("送料は0円以上で入力してください。");
+  }
+
+  if (Number.isNaN(values.feeRate) || values.feeRate < 0 || values.feeRate > 100) {
+    errors.push("販売手数料率は0〜100の範囲で入力してください。");
+  }
+
+  return errors;
+}
+
 // CSV内でカンマや改行があっても崩れないように、値をダブルクォートで囲みます
 function escapeCsvValue(value) {
   const text = String(value ?? "");
@@ -135,9 +195,9 @@ function saleToCsvRow(sale) {
 }
 
 // CSVテキストを作ります。Excelで開きやすいようにBOMも先頭に付けます
-function buildCsvText() {
+function buildCsvText(targetSales = sales) {
   const headerRow = csvHeaders.map(escapeCsvValue).join(",");
-  const dataRows = sales.map(saleToCsvRow);
+  const dataRows = targetSales.map(saleToCsvRow);
 
   return `\uFEFF${[headerRow, ...dataRows].join("\n")}`;
 }
@@ -249,22 +309,42 @@ function csvTextToSales(csvText) {
   });
 }
 
-// CSVファイルをダウンロードします
+// 指定したデータをCSVファイルとしてダウンロードします
+function downloadCsv(targetSales, fileName) {
+  const csvText = buildCsvText(targetSales);
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// すべての登録データをCSVファイルとしてダウンロードします
 function exportCsv() {
   if (sales.length === 0) {
     alert("出力するデータがありません。");
     return;
   }
 
-  const csvText = buildCsvText();
-  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  downloadCsv(sales, `sales-data-${getTodayText()}.csv`);
+}
 
-  link.href = url;
-  link.download = `sales-data-${getTodayText()}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+// 表示中の月に含まれるデータだけをCSVファイルとしてダウンロードします
+function exportMonthCsv() {
+  const selectedMonth = monthFilterInput.value;
+  const monthlySales = sales.filter(function (sale) {
+    return sale.saleDate && sale.saleDate.slice(0, 7) === selectedMonth;
+  });
+
+  if (monthlySales.length === 0) {
+    alert("この月のデータがありません。");
+    return;
+  }
+
+  downloadCsv(monthlySales, `sales-data-${selectedMonth}.csv`);
 }
 
 // CSV読み込み時、idが重複しないように調整します
@@ -651,6 +731,7 @@ function resetImageInput() {
 // フォームを新規登録モードに戻します
 function resetForm() {
   form.reset();
+  clearFormErrors();
   saleDateInput.value = getTodayText();
   document.getElementById("feeRate").value = "10";
   editingSaleId = null;
@@ -671,6 +752,7 @@ function startEditSale(id) {
     return;
   }
 
+  clearFormErrors();
   editingSaleId = id;
   imageSelectionId += 1;
   document.getElementById("saleDate").value = sale.saleDate;
@@ -1012,6 +1094,10 @@ function renderDashboard() {
 
 // 指定されたidの商品を削除します
 function deleteSale(id) {
+  if (!confirm("この商品を削除しますか？")) {
+    return;
+  }
+
   sales = sales.filter(function (sale) {
     return sale.id !== id;
   });
@@ -1021,6 +1107,26 @@ function deleteSale(id) {
   }
 
   saveSales();
+  renderDashboard();
+}
+
+// すべての商品データだけを削除します。折りたたみ状態などの設定は残します
+function deleteAllData() {
+  if (!confirm("すべての登録データを削除しますか？")) {
+    return;
+  }
+
+  if (!confirm("本当に削除しますか？この操作は元に戻せません")) {
+    return;
+  }
+
+  sales = [];
+
+  if (canUseStorage) {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  resetForm();
   renderDashboard();
 }
 
@@ -1057,6 +1163,16 @@ cancelEditButton.addEventListener("click", function () {
 // CSV出力ボタンが押されたら、全データをCSVとして保存します
 exportCsvButton.addEventListener("click", function () {
   exportCsv();
+});
+
+// 表示中の月だけをCSVとして保存します
+exportMonthCsvButton.addEventListener("click", function () {
+  exportMonthCsv();
+});
+
+// 全データ削除ボタンが押されたら、2回確認してから削除します
+deleteAllDataButton.addEventListener("click", function () {
+  deleteAllData();
 });
 
 // CSVファイルが選ばれたら、追加または置き換えで読み込みます
@@ -1123,12 +1239,29 @@ form.addEventListener("submit", async function (event) {
   // 入力された値を取得します
   const saleDate = document.getElementById("saleDate").value;
   const salesChannel = document.getElementById("salesChannel").value;
-  const itemName = document.getElementById("itemName").value;
+  const itemName = document.getElementById("itemName").value.trim();
   const salePrice = Number(document.getElementById("salePrice").value);
   const costPrice = Number(document.getElementById("costPrice").value);
   const shippingFee = Number(document.getElementById("shippingFee").value);
   const feeRate = Number(document.getElementById("feeRate").value);
-  const memo = document.getElementById("memo").value;
+  const memo = document.getElementById("memo").value.trim();
+  const errors = validateSaleInput({
+    saleDate,
+    salesChannel,
+    itemName,
+    salePrice,
+    costPrice,
+    shippingFee,
+    feeRate
+  });
+
+  // エラーがある場合は、登録・更新せずに内容を表示します
+  if (errors.length > 0) {
+    showFormErrors(errors);
+    return;
+  }
+
+  clearFormErrors();
 
   const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
 

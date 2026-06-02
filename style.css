@@ -206,6 +206,24 @@ button:active {
   font-weight: 700;
 }
 
+/* 入力エラーをフォーム上部にまとめて表示します */
+.form-error {
+  display: none;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid #f5b5ad;
+  border-radius: 8px;
+  color: #8f1d14;
+  background: #fff1f0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.form-error ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
 .form-actions,
 .sale-actions {
   display: grid;
@@ -221,6 +239,24 @@ button:active {
 
 .cancel-button:hover {
   background: #d9e1e8;
+}
+
+.secondary-button {
+  color: #415161;
+  background: #e8eef4;
+}
+
+.secondary-button:hover {
+  background: #d9e1e8;
+}
+
+.danger-button {
+  color: #ffffff;
+  background: #b42318;
+}
+
+.danger-button:hover {
+  background: #8f1d14;
 }
 
 /* CSV出力と読み込みをまとめる管理メニューです */

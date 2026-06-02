@@ -70,7 +70,8 @@
 
       <div class="section-content">
       <div class="csv-actions">
-        <button id="exportCsvButton" type="button">CSV出力</button>
+        <button id="exportCsvButton" type="button">全データCSV出力</button>
+        <button id="exportMonthCsvButton" class="secondary-button" type="button">表示中の月をCSV出力</button>
 
         <div class="csv-import-box">
           <label for="csvFileInput">
@@ -90,6 +91,9 @@
             </label>
           </div>
         </div>
+
+        <!-- テストデータをまとめて消すための危険操作です。JavaScriptで2回確認します -->
+        <button id="deleteAllDataButton" class="danger-button" type="button">全データ削除</button>
       </div>
       </div>
     </section>
@@ -170,9 +174,10 @@
       </div>
       <div class="section-content">
       <p id="editStatus" class="edit-status">編集中です。内容を変更して「更新する」を押してください。</p>
+      <div id="formError" class="form-error" role="alert"></div>
 
       <!-- 入力フォームです。JavaScriptで登録と計算を行います -->
-      <form id="salesForm" class="form">
+      <form id="salesForm" class="form" novalidate>
         <label for="saleDate">
           販売日
           <input id="saleDate" class="field" type="date" required>
@@ -207,7 +212,7 @@
         <label for="salePrice">
           売値
           <span class="input-wrap">
-            <input id="salePrice" type="number" min="0" step="1" placeholder="例: 3500" required>
+            <input id="salePrice" type="number" min="1" step="1" placeholder="例: 3500" required>
             <span>円</span>
           </span>
         </label>
