@@ -229,6 +229,66 @@ button:active {
   gap: 14px;
 }
 
+/* 月ごとの売上をまとめたサマリーカードです */
+.monthly-summary-card {
+  border-top: 5px solid #9a5b00;
+}
+
+.monthly-summary-list {
+  display: grid;
+  gap: 14px;
+}
+
+.monthly-summary-item {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+  padding: 16px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  color: #1f2933;
+  background: #f7fafc;
+  text-align: left;
+}
+
+.monthly-summary-item:hover {
+  background: #eef3f7;
+}
+
+.monthly-summary-title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.monthly-number-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.monthly-number {
+  padding: 12px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.monthly-number span {
+  display: block;
+  margin-bottom: 6px;
+  color: #5f6c7b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.monthly-number strong {
+  font-size: 17px;
+}
+
+.monthly-strong {
+  color: #146c5f;
+}
+
 /* 全体集計のカードです */
 .summary-card {
   border-top: 5px solid #146c5f;
@@ -470,6 +530,7 @@ button:active {
   .summary-grid,
   .channel-number-grid,
   .filter-grid,
+  .monthly-number-grid,
   .form-actions,
   .sale-actions {
     grid-template-columns: 1fr;

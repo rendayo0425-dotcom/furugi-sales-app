@@ -13,6 +13,7 @@ const totalProfit = document.getElementById("totalProfit");
 const averageProfitRate = document.getElementById("averageProfitRate");
 const summaryCount = document.getElementById("summaryCount");
 const channelSummaryList = document.getElementById("channelSummaryList");
+const monthlySummaryList = document.getElementById("monthlySummaryList");
 const itemImageInput = document.getElementById("itemImage");
 const imagePreviewWrap = document.getElementById("imagePreviewWrap");
 const imagePreview = document.getElementById("imagePreview");
@@ -405,6 +406,43 @@ function getVisibleSales(monthlySales) {
   return visibleSales;
 }
 
+// 「2026-06」を「2026年6月」のように表示しやすい形へ変換します
+function formatMonthLabel(monthText) {
+  const parts = monthText.split("-");
+  return `${parts[0]}年${Number(parts[1])}月`;
+}
+
+// 全データを販売日の年月ごとにまとめます
+function getMonthlySummaryGroups() {
+  const groups = {};
+
+  sales.forEach(function (sale) {
+    if (!sale.saleDate) {
+      return;
+    }
+
+    const month = sale.saleDate.slice(0, 7);
+
+    if (!groups[month]) {
+      groups[month] = [];
+    }
+
+    groups[month].push(sale);
+  });
+
+  return Object.keys(groups)
+    .sort(function (firstMonth, secondMonth) {
+      return secondMonth.localeCompare(firstMonth);
+    })
+    .map(function (month) {
+      return {
+        month,
+        sales: groups[month],
+        summary: calculateSummary(groups[month])
+      };
+    });
+}
+
 // 集計に使う合計値や平均値を計算します
 function calculateSummary(targetSales) {
   const salesTotal = targetSales.reduce(function (total, sale) {
@@ -702,6 +740,71 @@ function renderChannelSummary(filteredSales) {
   });
 }
 
+// 月別サマリーを画面に表示します
+function renderMonthlySummary() {
+  monthlySummaryList.innerHTML = "";
+  const monthlyGroups = getMonthlySummaryGroups();
+
+  if (monthlyGroups.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-message";
+    empty.textContent = "まだ月別サマリーを表示できるデータがありません。";
+    monthlySummaryList.appendChild(empty);
+    return;
+  }
+
+  monthlyGroups.forEach(function (monthlyGroup) {
+    const summary = monthlyGroup.summary;
+    const button = document.createElement("button");
+    button.className = "monthly-summary-item";
+    button.type = "button";
+
+    const title = document.createElement("h3");
+    title.className = "monthly-summary-title";
+    title.textContent = formatMonthLabel(monthlyGroup.month);
+
+    const numberGrid = document.createElement("div");
+    numberGrid.className = "monthly-number-grid";
+
+    const numberItems = [
+      ["売上合計", formatYen(summary.salesTotal)],
+      ["原価合計", formatYen(summary.costTotal)],
+      ["送料合計", formatYen(summary.shippingTotal)],
+      ["手数料合計", formatYen(summary.feeTotal)],
+      ["利益合計", formatYen(summary.profitTotal), "monthly-strong"],
+      ["平均利益率", formatPercent(summary.totalProfitRate), "monthly-strong"],
+      ["登録件数", `${summary.count}件`]
+    ];
+
+    numberItems.forEach(function (numberItem) {
+      const box = document.createElement("div");
+      box.className = "monthly-number";
+
+      const label = document.createElement("span");
+      label.textContent = numberItem[0];
+
+      const value = document.createElement("strong");
+      value.textContent = numberItem[1];
+
+      if (numberItem[2]) {
+        value.className = numberItem[2];
+      }
+
+      box.append(label, value);
+      numberGrid.appendChild(box);
+    });
+
+    // 月別サマリーを押したら、既存の月フィルターをその月に切り替えます
+    button.addEventListener("click", function () {
+      monthFilterInput.value = monthlyGroup.month;
+      renderDashboard();
+    });
+
+    button.append(title, numberGrid);
+    monthlySummaryList.appendChild(button);
+  });
+}
+
 // 登録済み一覧を画面に描画します
 function renderSalesList(filteredSales) {
   salesList.innerHTML = "";
@@ -718,6 +821,7 @@ function renderDashboard() {
   const filteredSales = getFilteredSales();
   const visibleSales = getVisibleSales(filteredSales);
 
+  renderMonthlySummary();
   renderTotalSummary(filteredSales);
   renderChannelSummary(filteredSales);
   renderSalesList(visibleSales);
