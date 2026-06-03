@@ -1204,3 +1204,150 @@ button:active {
     height: 44px;
   }
 }
+
+/* 横はみ出し防止の最終ガードです。iPhone Safariではdate/month入力の最小幅が強く出ることがあるため、最後にまとめて上書きします */
+@media (max-width: 768px) {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow-x: hidden;
+  }
+
+  main,
+  .app,
+  .container,
+  section,
+  .section,
+  .card,
+  .panel,
+  .calculator,
+  .summary,
+  .form-section {
+    width: 100%;
+    max-width: 100%;
+    margin-right: 0;
+    margin-left: 0;
+    overflow-x: hidden;
+  }
+
+  .app {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .card,
+  .month-filter-card,
+  .sales-form-card {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  form,
+  .form,
+  .form-grid,
+  .form-row,
+  .field-row,
+  .date-row,
+  .sales-form-card .form {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-inline-size: 0;
+  }
+
+  .sales-form-card label,
+  .sales-form-card .input-wrap,
+  .sales-form-card .field,
+  .sales-form-card .image-preview-wrap,
+  .sales-form-card .image-delete-button,
+  .sales-form-card .form-actions,
+  .month-filter-card label {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-inline-size: 0;
+  }
+
+  input,
+  select,
+  textarea,
+  button,
+  .field,
+  .input-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-inline-size: 0;
+    box-sizing: border-box;
+  }
+
+  input,
+  select,
+  textarea,
+  .field {
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+
+  input[type="date"],
+  input[type="month"],
+  input[type="date"].field,
+  input[type="month"].field,
+  #saleDate,
+  #purchaseDate,
+  #monthFilter {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-inline-size: 0;
+    height: 44px;
+    font-size: 16px;
+    text-align: left;
+  }
+
+  select,
+  select.field {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 44px;
+    padding-right: 32px;
+  }
+
+  textarea,
+  textarea.field {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  img,
+  canvas,
+  .image-preview {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .input-wrap {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .input-wrap input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+}
