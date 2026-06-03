@@ -1351,3 +1351,50 @@ button:active {
     min-width: 0;
   }
 }
+
+/* 見出し横の折りたたみボタンだけは全幅にしません。全ボタン100%指定でタイトルが縦に崩れるのを防ぎます */
+@media (max-width: 768px) {
+  .section-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-header h2 {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    white-space: normal;
+    writing-mode: horizontal-tb;
+  }
+
+  .section-header-actions {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-content: end;
+    min-width: 0;
+  }
+
+  .section-toggle,
+  .section-header .section-toggle,
+  .section-header-actions .section-toggle {
+    width: auto;
+    max-width: none;
+    min-width: 72px;
+    min-inline-size: 72px;
+    justify-self: end;
+    white-space: nowrap;
+  }
+
+  .form-actions button,
+  .csv-actions > button,
+  .sale-actions button,
+  .detail-toggle-button {
+    width: 100%;
+    max-width: 100%;
+  }
+}
