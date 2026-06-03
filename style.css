@@ -714,27 +714,214 @@ button:active {
   text-align: center;
 }
 
-/* スマホでは余白と一覧の列数を調整します */
-@media (max-width: 520px) {
+/* タブレット幅以下では、実用アプリとして情報量を増やすため全体を少しコンパクトにします */
+@media (max-width: 768px) {
   .app {
-    padding: calc(20px + env(safe-area-inset-top)) 14px calc(32px + env(safe-area-inset-bottom));
+    padding: calc(16px + env(safe-area-inset-top)) 10px calc(24px + env(safe-area-inset-bottom));
   }
 
-  .card {
-    padding: 20px;
+  .page-header {
+    margin-bottom: 10px;
   }
 
   h1 {
-    font-size: 26px;
+    margin-bottom: 6px;
+    font-size: 24px;
+  }
+
+  h2,
+  .section-header h2 {
+    font-size: 20px;
+  }
+
+  .lead {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .card {
+    margin-top: 10px;
+    padding: 14px;
+    box-shadow: 0 6px 18px rgba(31, 41, 51, 0.1);
+  }
+
+  .section-header {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .section-header-actions {
+    gap: 6px;
+  }
+
+  .section-toggle {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .form {
+    gap: 11px;
+  }
+
+  label {
+    gap: 5px;
+    font-size: 15px;
+  }
+
+  .field {
+    min-height: 42px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 16px;
+  }
+
+  textarea.field {
+    min-height: 74px;
+    padding-top: 9px;
+  }
+
+  .file-field {
+    padding-top: 10px;
+  }
+
+  .input-wrap {
+    gap: 6px;
+    padding: 0 10px;
+    border-radius: 7px;
+  }
+
+  .input-wrap input {
+    min-height: 42px;
+    font-size: 16px;
+  }
+
+  button {
+    min-height: 44px;
+    border-radius: 7px;
+    font-size: 16px;
+  }
+
+  .edit-status,
+  .form-error {
+    margin-bottom: 10px;
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .image-preview {
+    max-height: 150px;
+  }
+
+  .image-delete-button {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .csv-actions,
+  .filter-grid,
+  .monthly-summary-list,
+  .channel-summary-list,
+  .form-actions,
+  .sale-actions {
+    gap: 10px;
+  }
+
+  .csv-import-box {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .summary-year-control {
+    margin-bottom: 10px;
   }
 
   .summary-grid,
   .kpi-grid,
   .channel-number-grid,
+  .monthly-number-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .summary-box,
+  .kpi-box,
+  .channel-number,
+  .monthly-number {
+    padding: 10px;
+  }
+
+  .summary-box strong,
+  .kpi-box strong {
+    font-size: 17px;
+  }
+
+  .monthly-number strong,
+  .channel-number strong {
+    font-size: 15px;
+  }
+
+  .monthly-summary-item,
+  .channel-summary-item {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .monthly-summary-title,
+  .channel-summary-title {
+    font-size: 17px;
+  }
+}
+
+/* 小さめのスマホでは、さらに余白を詰めて縦に長くなりすぎないようにします */
+@media (max-width: 520px) {
+  .app {
+    padding: calc(12px + env(safe-area-inset-top)) 8px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .card {
+    margin-top: 8px;
+    padding: 12px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  h2,
+  .section-header h2 {
+    font-size: 19px;
+  }
+
+  .section-header {
+    margin-bottom: 10px;
+  }
+
+  label {
+    font-size: 14px;
+  }
+
+  .field,
+  .input-wrap input {
+    min-height: 40px;
+    font-size: 16px;
+  }
+
+  button {
+    min-height: 42px;
+    font-size: 15px;
+  }
+
+  .section-toggle {
+    min-height: 34px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
   .filter-grid,
-  .monthly-number-grid,
-  .form-actions,
-  .sale-actions {
+  .form-actions {
     grid-template-columns: 1fr;
   }
 
