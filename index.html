@@ -2,8 +2,18 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- viewport-fit=coverで、iPhoneのホーム画面起動時も画面を広く使いやすくします -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>古着販売 売上登録アプリ</title>
+  <!-- PWAとしてホーム画面に追加するための設定ファイルを読み込みます -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#146c5f">
+  <!-- iPhoneのSafariでホーム画面に追加したとき、アプリ風に起動するための設定です -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="古着売上管理">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- アイコン画像を用意したら、このファイル名で置くとiPhoneでも使いやすくなります -->
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -325,5 +335,16 @@
   </main>
 
   <script src="script.js"></script>
+  <script>
+    // Service Workerに対応しているブラウザだけ、オフライン用のキャッシュ処理を登録します
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./service-worker.js").catch(function (error) {
+          // 登録に失敗しても、アプリ本体は通常通り使えるようにします
+          console.warn("Service Workerを登録できませんでした。", error);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
