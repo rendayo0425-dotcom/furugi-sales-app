@@ -1,6 +1,6 @@
 // キャッシュ名を変えると、古いキャッシュを削除して新しいファイルを使いやすくなります。
-// HTML/CSS/JSを大きく変更したのに反映されないときは、この v1 を v2 のように増やしてください。
-const CACHE_NAME = "used-clothes-sales-v1";
+// HTML/CSS/JSを大きく変更したのに反映されないときは、この v2 を v3 のように増やしてください。
+const CACHE_NAME = "used-clothes-sales-v2";
 
 // オフラインでも最低限アプリ画面を開けるように、基本ファイルだけ保存します。
 // 画像やCSVは容量が大きくなりやすいので、ここではキャッシュしません。
@@ -19,6 +19,9 @@ self.addEventListener("install", function (event) {
       return cache.addAll(APP_FILES);
     })
   );
+
+  // 新しいキャッシュ名に変えたとき、できるだけ早く新しいService Workerへ切り替えます。
+  self.skipWaiting();
 });
 
 // 新しいService Workerが有効になったとき、古いキャッシュを削除します。
@@ -34,6 +37,9 @@ self.addEventListener("activate", function (event) {
           return Promise.resolve();
         })
       );
+    }).then(function () {
+      // すでに開いている画面にも、新しいキャッシュ設定を反映しやすくします。
+      return self.clients.claim();
     })
   );
 });

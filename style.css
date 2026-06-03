@@ -929,3 +929,197 @@ button:active {
     grid-template-columns: 1fr;
   }
 }
+
+/* iPhone実機向けの最終調整です。下に書くことで既存のスマホCSSより優先させます */
+@media (max-width: 768px) {
+  body {
+    font-size: 16px;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 100%;
+    padding: calc(12px + env(safe-area-inset-top)) 12px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .page-header {
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    margin-bottom: 4px;
+    font-size: 24px;
+    line-height: 1.25;
+  }
+
+  h2,
+  .section-header h2 {
+    font-size: 20px;
+    line-height: 1.25;
+  }
+
+  .lead {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .card {
+    width: 100%;
+    margin-top: 12px;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(31, 41, 51, 0.08);
+  }
+
+  .month-filter-card {
+    margin-top: 10px;
+    padding: 14px 16px;
+  }
+
+  .section-header {
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .section-header-actions {
+    min-width: 0;
+  }
+
+  .section-toggle {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .form {
+    gap: 12px;
+  }
+
+  .sales-form-card .form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+  }
+
+  .sales-form-card label[for="salesChannel"],
+  .sales-form-card label[for="itemName"],
+  .sales-form-card label[for="itemImage"],
+  .sales-form-card .image-preview-wrap,
+  .sales-form-card .image-delete-button,
+  .sales-form-card label[for="memo"],
+  .sales-form-card .form-actions {
+    grid-column: 1 / -1;
+  }
+
+  label {
+    gap: 5px;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .field {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 16px;
+    line-height: 1.2;
+    box-sizing: border-box;
+  }
+
+  input[type="month"].field,
+  input[type="date"].field,
+  select.field {
+    height: 44px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  #monthFilter {
+    font-size: 18px;
+  }
+
+  textarea.field {
+    min-height: 72px;
+    padding-top: 10px;
+    line-height: 1.45;
+  }
+
+  .file-field {
+    padding-top: 9px;
+  }
+
+  .input-wrap {
+    min-height: 44px;
+    gap: 6px;
+    padding: 0 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+  }
+
+  .input-wrap input {
+    min-height: 42px;
+    font-size: 16px;
+    line-height: 1.2;
+  }
+
+  button {
+    min-height: 44px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .edit-status,
+  .form-error {
+    margin-bottom: 10px;
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .image-preview {
+    max-height: 132px;
+  }
+
+  .image-delete-button {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .csv-actions,
+  .filter-grid,
+  .monthly-summary-list,
+  .channel-summary-list,
+  .form-actions,
+  .sale-actions {
+    gap: 10px;
+  }
+
+  .csv-import-box,
+  .monthly-summary-item,
+  .channel-summary-item {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .summary-grid,
+  .kpi-grid,
+  .channel-number-grid,
+  .monthly-number-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .summary-box,
+  .kpi-box,
+  .channel-number,
+  .monthly-number,
+  .detail-number {
+    padding: 10px;
+    border-radius: 8px;
+  }
+}

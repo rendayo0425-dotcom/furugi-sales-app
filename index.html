@@ -25,199 +25,8 @@
       <p class="lead">販売した商品を登録して、利益と利益率を一覧で確認できます。</p>
     </header>
 
-    <!-- 表示する月を選ぶカードです -->
-    <section class="card">
-      <label for="monthFilter">
-        表示する月
-        <input id="monthFilter" class="field" type="month" required>
-      </label>
-    </section>
-
-    <!-- 一覧の検索・絞り込み・並び替えを行う表示設定です -->
-    <section class="card filter-card" data-section-id="filters">
-      <div class="section-header">
-        <h2>表示設定</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div class="filter-grid">
-        <label for="searchInput">
-          商品名・メモ検索
-          <input id="searchInput" class="field" type="search" placeholder="キーワードを入力">
-        </label>
-
-        <label for="channelFilter">
-          販路で絞り込み
-          <select id="channelFilter" class="field">
-            <option value="all">すべて</option>
-            <option value="メルカリメイン">メルカリメイン</option>
-            <option value="メルカリサブ">メルカリサブ</option>
-            <option value="ヤフー">ヤフー</option>
-            <option value="ラクマ">ラクマ</option>
-          </select>
-        </label>
-
-        <label for="sortSelect">
-          並び替え
-          <select id="sortSelect" class="field">
-            <option value="dateDesc">販売日が新しい順</option>
-            <option value="dateAsc">販売日が古い順</option>
-            <option value="priceDesc">売値が高い順</option>
-            <option value="profitDesc">利益が高い順</option>
-            <option value="profitRateDesc">利益率が高い順</option>
-          </select>
-        </label>
-      </div>
-      </div>
-    </section>
-
-    <!-- CSVの出力と読み込みを行う管理メニューです -->
-    <section class="card csv-card" data-section-id="csv">
-      <div class="section-header">
-        <h2>データ管理</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-
-      <div class="section-content">
-      <div class="csv-actions">
-        <button id="exportCsvButton" type="button">全データCSV出力</button>
-        <button id="exportMonthCsvButton" class="secondary-button" type="button">表示中の月をCSV出力</button>
-
-        <div class="csv-import-box">
-          <label for="csvFileInput">
-            CSV読み込み
-            <input id="csvFileInput" class="field file-field" type="file" accept=".csv,text/csv">
-          </label>
-
-          <!-- 読み込み時に、今のデータへ追加するか置き換えるかを選びます -->
-          <div class="import-mode">
-            <label>
-              <input type="radio" name="importMode" value="append" checked>
-              現在のデータに追加する
-            </label>
-            <label>
-              <input type="radio" name="importMode" value="replace">
-              現在のデータを置き換える
-            </label>
-          </div>
-        </div>
-
-        <!-- テストデータをまとめて消すための危険操作です。JavaScriptで2回確認します -->
-        <button id="deleteAllDataButton" class="danger-button" type="button">全データ削除</button>
-      </div>
-      </div>
-    </section>
-
-    <!-- 登録済みデータを月ごとにまとめたサマリーです -->
-    <section class="card monthly-summary-card" data-section-id="monthlySummary">
-      <div class="section-header">
-        <h2>月別サマリー</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <label for="summaryYearSelect" class="summary-year-control">
-        年度
-        <select id="summaryYearSelect" class="field"></select>
-      </label>
-
-      <!-- JavaScriptで月別サマリーカードをここに追加します -->
-      <div id="monthlySummaryList" class="monthly-summary-list"></div>
-      </div>
-    </section>
-
-    <!-- 選択中の月の全体集計を表示するカードです -->
-    <section class="card summary-card" data-section-id="totalSummary">
-      <div class="section-header">
-        <h2>全体集計</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div class="summary-grid">
-        <div class="summary-box">
-          <span>売上合計</span>
-          <strong id="totalSales">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>原価合計</span>
-          <strong id="totalCost">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>送料合計</span>
-          <strong id="totalShipping">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>手数料合計</span>
-          <strong id="totalFee">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>利益合計</span>
-          <strong id="totalProfit">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>平均利益率</span>
-          <strong id="averageProfitRate">0.0%</strong>
-        </div>
-        <div class="summary-box">
-          <span>登録件数</span>
-          <strong id="summaryCount">0件</strong>
-        </div>
-      </div>
-      </div>
-    </section>
-
-    <!-- 選択中の月の平均値や収益性を確認するKPIカードです -->
-    <section class="card kpi-card" data-section-id="kpiSummary">
-      <div class="section-header">
-        <h2>分析指標</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div class="kpi-grid">
-        <div class="kpi-box">
-          <span>平均売価</span>
-          <strong id="averageSalePrice">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均原価</span>
-          <strong id="averageCostPrice">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均送料</span>
-          <strong id="averageShippingFee">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均手数料</span>
-          <strong id="averageFee">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均利益</span>
-          <strong id="averageProfit">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均販売日数</span>
-          <strong id="averageSaleDays">-</strong>
-        </div>
-        <div class="kpi-box kpi-highlight">
-          <span>粗利率</span>
-          <strong id="grossProfitRate">0.0%</strong>
-        </div>
-      </div>
-      </div>
-    </section>
-
-    <!-- 選択中の月の販路別集計を表示するカードです -->
-    <section class="card channel-summary-card" data-section-id="channelSummary">
-      <div class="section-header">
-        <h2>販路別集計</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div id="channelSummaryList" class="channel-summary-list"></div>
-      </div>
-    </section>
-
     <!-- 売上を入力するカードです -->
-    <section class="card" data-section-id="salesForm">
+    <section class="card sales-form-card" data-section-id="salesForm">
       <div class="section-header">
         <h2 id="formTitle">売上を登録</h2>
         <button class="section-toggle" type="button">− しまう</button>
@@ -311,6 +120,197 @@
           <button id="cancelEditButton" class="cancel-button" type="button">キャンセル</button>
         </div>
       </form>
+      </div>
+    </section>
+
+    <!-- 表示する月を選ぶカードです -->
+    <section class="card month-filter-card">
+      <label for="monthFilter">
+        表示する月
+        <input id="monthFilter" class="field" type="month" required>
+      </label>
+    </section>
+
+    <!-- 選択中の月の全体集計を表示するカードです -->
+    <section class="card summary-card" data-section-id="totalSummary">
+      <div class="section-header">
+        <h2>全体集計</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
+      <div class="summary-grid">
+        <div class="summary-box">
+          <span>売上合計</span>
+          <strong id="totalSales">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>原価合計</span>
+          <strong id="totalCost">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>送料合計</span>
+          <strong id="totalShipping">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>手数料合計</span>
+          <strong id="totalFee">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>利益合計</span>
+          <strong id="totalProfit">0円</strong>
+        </div>
+        <div class="summary-box">
+          <span>平均利益率</span>
+          <strong id="averageProfitRate">0.0%</strong>
+        </div>
+        <div class="summary-box">
+          <span>登録件数</span>
+          <strong id="summaryCount">0件</strong>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <!-- 選択中の月の平均値や収益性を確認するKPIカードです -->
+    <section class="card kpi-card" data-section-id="kpiSummary">
+      <div class="section-header">
+        <h2>分析指標</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
+      <div class="kpi-grid">
+        <div class="kpi-box">
+          <span>平均売価</span>
+          <strong id="averageSalePrice">0円</strong>
+        </div>
+        <div class="kpi-box">
+          <span>平均原価</span>
+          <strong id="averageCostPrice">0円</strong>
+        </div>
+        <div class="kpi-box">
+          <span>平均送料</span>
+          <strong id="averageShippingFee">0円</strong>
+        </div>
+        <div class="kpi-box">
+          <span>平均手数料</span>
+          <strong id="averageFee">0円</strong>
+        </div>
+        <div class="kpi-box">
+          <span>平均利益</span>
+          <strong id="averageProfit">0円</strong>
+        </div>
+        <div class="kpi-box">
+          <span>平均販売日数</span>
+          <strong id="averageSaleDays">-</strong>
+        </div>
+        <div class="kpi-box kpi-highlight">
+          <span>粗利率</span>
+          <strong id="grossProfitRate">0.0%</strong>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <!-- 選択中の月の販路別集計を表示するカードです -->
+    <section class="card channel-summary-card" data-section-id="channelSummary">
+      <div class="section-header">
+        <h2>販路別集計</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
+      <div id="channelSummaryList" class="channel-summary-list"></div>
+      </div>
+    </section>
+
+    <!-- 登録済みデータを月ごとにまとめたサマリーです -->
+    <section class="card monthly-summary-card" data-section-id="monthlySummary">
+      <div class="section-header">
+        <h2>月別サマリー</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
+      <label for="summaryYearSelect" class="summary-year-control">
+        年度
+        <select id="summaryYearSelect" class="field"></select>
+      </label>
+
+      <!-- JavaScriptで月別サマリーカードをここに追加します -->
+      <div id="monthlySummaryList" class="monthly-summary-list"></div>
+      </div>
+    </section>
+
+    <!-- 一覧の検索・絞り込み・並び替えを行う表示設定です -->
+    <section class="card filter-card" data-section-id="filters">
+      <div class="section-header">
+        <h2>表示設定</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
+      <div class="filter-grid">
+        <label for="searchInput">
+          商品名・メモ検索
+          <input id="searchInput" class="field" type="search" placeholder="キーワードを入力">
+        </label>
+
+        <label for="channelFilter">
+          販路で絞り込み
+          <select id="channelFilter" class="field">
+            <option value="all">すべて</option>
+            <option value="メルカリメイン">メルカリメイン</option>
+            <option value="メルカリサブ">メルカリサブ</option>
+            <option value="ヤフー">ヤフー</option>
+            <option value="ラクマ">ラクマ</option>
+          </select>
+        </label>
+
+        <label for="sortSelect">
+          並び替え
+          <select id="sortSelect" class="field">
+            <option value="dateDesc">販売日が新しい順</option>
+            <option value="dateAsc">販売日が古い順</option>
+            <option value="priceDesc">売値が高い順</option>
+            <option value="profitDesc">利益が高い順</option>
+            <option value="profitRateDesc">利益率が高い順</option>
+          </select>
+        </label>
+      </div>
+      </div>
+    </section>
+
+    <!-- CSVの出力と読み込みを行う管理メニューです -->
+    <section class="card csv-card" data-section-id="csv">
+      <div class="section-header">
+        <h2>データ管理</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+
+      <div class="section-content">
+      <div class="csv-actions">
+        <button id="exportCsvButton" type="button">全データCSV出力</button>
+        <button id="exportMonthCsvButton" class="secondary-button" type="button">表示中の月をCSV出力</button>
+
+        <div class="csv-import-box">
+          <label for="csvFileInput">
+            CSV読み込み
+            <input id="csvFileInput" class="field file-field" type="file" accept=".csv,text/csv">
+          </label>
+
+          <!-- 読み込み時に、今のデータへ追加するか置き換えるかを選びます -->
+          <div class="import-mode">
+            <label>
+              <input type="radio" name="importMode" value="append" checked>
+              現在のデータに追加する
+            </label>
+            <label>
+              <input type="radio" name="importMode" value="replace">
+              現在のデータを置き換える
+            </label>
+          </div>
+        </div>
+
+        <!-- テストデータをまとめて消すための危険操作です。JavaScriptで2回確認します -->
+        <button id="deleteAllDataButton" class="danger-button" type="button">全データ削除</button>
+      </div>
       </div>
     </section>
 
