@@ -456,6 +456,84 @@ button:active {
   color: #146c5f;
 }
 
+/* 選択中の月を週ごとに分けて確認するレポートです */
+.weekly-report-card {
+  border-top: 5px solid #245c8f;
+}
+
+.weekly-report-list {
+  display: grid;
+  gap: 12px;
+}
+
+.weekly-report-item {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.weekly-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.weekly-report-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.weekly-report-count {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #146c5f;
+  background: #dff3ee;
+  white-space: nowrap;
+}
+
+.weekly-main-grid,
+.weekly-detail-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.weekly-main-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.weekly-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.weekly-main-number,
+.weekly-detail-number {
+  padding: 10px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.weekly-main-number {
+  background: #edf7f4;
+}
+
+.weekly-main-number span,
+.weekly-detail-number span {
+  display: block;
+  margin-bottom: 4px;
+  color: #5f6c7b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.weekly-main-number strong,
+.weekly-detail-number strong {
+  font-size: 15px;
+}
+
 /* 販路別集計のカードです */
 .channel-summary-card {
   border-top: 5px solid #6f5adc;
@@ -1109,7 +1187,9 @@ button:active {
   .summary-grid,
   .kpi-grid,
   .channel-number-grid,
-  .monthly-number-grid {
+  .monthly-number-grid,
+  .weekly-main-grid,
+  .weekly-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
@@ -1118,7 +1198,9 @@ button:active {
   .kpi-box,
   .channel-number,
   .monthly-number,
-  .detail-number {
+  .detail-number,
+  .weekly-main-number,
+  .weekly-detail-number {
     padding: 10px;
     border-radius: 8px;
   }

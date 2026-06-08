@@ -24,6 +24,7 @@ const averageProfit = document.getElementById("averageProfit");
 const averageDeposit = document.getElementById("averageDeposit");
 const averageSaleDays = document.getElementById("averageSaleDays");
 const grossProfitRate = document.getElementById("grossProfitRate");
+const weeklyReportList = document.getElementById("weeklyReportList");
 const channelSummaryList = document.getElementById("channelSummaryList");
 const monthlySummaryList = document.getElementById("monthlySummaryList");
 const summaryYearSelect = document.getElementById("summaryYearSelect");
@@ -562,6 +563,36 @@ function formatMonthLabel(monthText) {
   return `${parts[0]}年${Number(parts[1])}月`;
 }
 
+// 「2026-06」のような月から、その月の最終日を取得します
+function getLastDayOfMonth(monthText) {
+  const parts = monthText.split("-");
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+
+  return new Date(year, month, 0).getDate();
+}
+
+// 選択中の月を、1〜7日、8〜14日、15〜21日、22日〜月末の4週に分けます
+function getWeeklyRanges(monthText) {
+  const lastDay = getLastDayOfMonth(monthText);
+  const monthNumber = Number(monthText.split("-")[1]);
+  const ranges = [
+    [1, 7],
+    [8, 14],
+    [15, 21],
+    [22, lastDay]
+  ];
+
+  return ranges.map(function (range, index) {
+    return {
+      weekNumber: index + 1,
+      startDay: range[0],
+      endDay: range[1],
+      label: `第${index + 1}週 ${monthNumber}/${range[0]}〜${monthNumber}/${range[1]}`
+    };
+  });
+}
+
 // 登録済みデータから、月別サマリーで選べる年度を作ります
 function getAvailableSummaryYears() {
   const years = new Set();
@@ -715,6 +746,32 @@ function calculateKpi(targetSales) {
     averageDeposit: count === 0 ? 0 : depositTotal / count,
     averageSaleDays: saleDaysValues.length === 0 ? null : saleDaysTotal / saleDaysValues.length,
     grossProfitRate: summary.salesTotal === 0 ? 0 : summary.profitTotal / summary.salesTotal * 100
+  };
+}
+
+// 週間レポート用に、合計・平均・率をまとめて計算します
+function calculateWeeklyMetrics(targetSales) {
+  const summary = calculateSummary(targetSales);
+  const count = summary.count;
+  const depositTotal = targetSales.reduce(function (total, sale) {
+    const deposit = Number(sale.salePrice || 0) - Number(sale.fee || 0) - Number(sale.shippingFee || 0);
+    return total + deposit;
+  }, 0);
+
+  return {
+    salesTotal: summary.salesTotal,
+    costTotal: summary.costTotal,
+    shippingTotal: summary.shippingTotal,
+    feeTotal: summary.feeTotal,
+    profitTotal: summary.profitTotal,
+    count,
+    averageSalePrice: count === 0 ? 0 : summary.salesTotal / count,
+    averageProfit: count === 0 ? 0 : summary.profitTotal / count,
+    averageProfitRate: summary.salesTotal === 0 ? 0 : summary.profitTotal / summary.salesTotal * 100,
+    costRate: summary.salesTotal === 0 ? 0 : summary.costTotal / summary.salesTotal * 100,
+    shippingRate: summary.salesTotal === 0 ? 0 : summary.shippingTotal / summary.salesTotal * 100,
+    feeRate: summary.salesTotal === 0 ? 0 : summary.feeTotal / summary.salesTotal * 100,
+    averageDeposit: count === 0 ? 0 : depositTotal / count
   };
 }
 
@@ -1088,6 +1145,98 @@ function renderKpiSummary(filteredSales) {
   grossProfitRate.textContent = formatPercent(kpi.grossProfitRate);
 }
 
+// 選択中の月を4週に分けて、週ごとのレポートを表示します
+function renderWeeklyReport(filteredSales) {
+  const selectedMonth = monthFilterInput.value;
+  const weeklyRanges = getWeeklyRanges(selectedMonth);
+
+  weeklyReportList.innerHTML = "";
+
+  weeklyRanges.forEach(function (range) {
+    const weeklySales = filteredSales.filter(function (sale) {
+      const saleDay = Number(String(sale.saleDate || "").slice(8, 10));
+      return saleDay >= range.startDay && saleDay <= range.endDay;
+    });
+    const metrics = calculateWeeklyMetrics(weeklySales);
+    const card = document.createElement("article");
+    card.className = "weekly-report-item";
+
+    const header = document.createElement("div");
+    header.className = "weekly-report-header";
+
+    const title = document.createElement("h3");
+    title.className = "weekly-report-title";
+    title.textContent = range.label;
+
+    const count = document.createElement("strong");
+    count.className = "weekly-report-count";
+    count.textContent = `${metrics.count}件`;
+
+    header.append(title, count);
+
+    const mainGrid = document.createElement("div");
+    mainGrid.className = "weekly-main-grid";
+
+    const mainItems = [
+      ["売上合計", formatYen(metrics.salesTotal)],
+      ["利益合計", formatYen(metrics.profitTotal), metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus"],
+      ["登録件数", `${metrics.count}件`]
+    ];
+
+    mainItems.forEach(function (item) {
+      const box = document.createElement("div");
+      box.className = "weekly-main-number";
+
+      const label = document.createElement("span");
+      label.textContent = item[0];
+
+      const value = document.createElement("strong");
+      value.textContent = item[1];
+
+      if (item[2]) {
+        value.className = item[2];
+      }
+
+      box.append(label, value);
+      mainGrid.appendChild(box);
+    });
+
+    const detailGrid = document.createElement("div");
+    detailGrid.className = "weekly-detail-grid";
+
+    const detailItems = [
+      ["期間", `${range.startDay}日〜${range.endDay}日`],
+      ["原価合計", formatYen(metrics.costTotal)],
+      ["送料合計", formatYen(metrics.shippingTotal)],
+      ["手数料合計", formatYen(metrics.feeTotal)],
+      ["平均売価", formatYen(metrics.averageSalePrice)],
+      ["平均利益", formatYen(metrics.averageProfit)],
+      ["平均利益率", formatPercent(metrics.averageProfitRate)],
+      ["原価率", formatPercent(metrics.costRate)],
+      ["送料率", formatPercent(metrics.shippingRate)],
+      ["手数料率", formatPercent(metrics.feeRate)],
+      ["平均入金額", formatYen(metrics.averageDeposit)]
+    ];
+
+    detailItems.forEach(function (item) {
+      const box = document.createElement("div");
+      box.className = "weekly-detail-number";
+
+      const label = document.createElement("span");
+      label.textContent = item[0];
+
+      const value = document.createElement("strong");
+      value.textContent = item[1];
+
+      box.append(label, value);
+      detailGrid.appendChild(box);
+    });
+
+    card.append(header, mainGrid, detailGrid);
+    weeklyReportList.appendChild(card);
+  });
+}
+
 // 販路別集計を画面に表示します
 function renderChannelSummary(filteredSales) {
   channelSummaryList.innerHTML = "";
@@ -1223,6 +1372,7 @@ function renderDashboard() {
   renderMonthlySummary();
   renderTotalSummary(filteredSales);
   renderKpiSummary(filteredSales);
+  renderWeeklyReport(filteredSales);
   renderChannelSummary(filteredSales);
   renderSalesList(visibleSales);
 }
