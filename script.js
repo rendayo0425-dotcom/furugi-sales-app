@@ -17,7 +17,11 @@ const averageSalePrice = document.getElementById("averageSalePrice");
 const averageCostPrice = document.getElementById("averageCostPrice");
 const averageShippingFee = document.getElementById("averageShippingFee");
 const averageFee = document.getElementById("averageFee");
+const kpiFeeRate = document.getElementById("kpiFeeRate");
+const kpiShippingRate = document.getElementById("kpiShippingRate");
+const kpiCostRate = document.getElementById("kpiCostRate");
 const averageProfit = document.getElementById("averageProfit");
+const averageDeposit = document.getElementById("averageDeposit");
 const averageSaleDays = document.getElementById("averageSaleDays");
 const grossProfitRate = document.getElementById("grossProfitRate");
 const channelSummaryList = document.getElementById("channelSummaryList");
@@ -693,13 +697,22 @@ function calculateKpi(targetSales) {
   const saleDaysTotal = saleDaysValues.reduce(function (total, saleDays) {
     return total + saleDays;
   }, 0);
+  // 入金額は「売価 - 手数料 - 送料」です。商品ごとに計算して合計します
+  const depositTotal = targetSales.reduce(function (total, sale) {
+    const deposit = Number(sale.salePrice || 0) - Number(sale.fee || 0) - Number(sale.shippingFee || 0);
+    return total + deposit;
+  }, 0);
 
   return {
     averageSalePrice: count === 0 ? 0 : summary.salesTotal / count,
     averageCostPrice: count === 0 ? 0 : summary.costTotal / count,
     averageShippingFee: count === 0 ? 0 : summary.shippingTotal / count,
     averageFee: count === 0 ? 0 : summary.feeTotal / count,
+    feeRate: summary.salesTotal === 0 ? 0 : summary.feeTotal / summary.salesTotal * 100,
+    shippingRate: summary.salesTotal === 0 ? 0 : summary.shippingTotal / summary.salesTotal * 100,
+    costRate: summary.salesTotal === 0 ? 0 : summary.costTotal / summary.salesTotal * 100,
     averageProfit: count === 0 ? 0 : summary.profitTotal / count,
+    averageDeposit: count === 0 ? 0 : depositTotal / count,
     averageSaleDays: saleDaysValues.length === 0 ? null : saleDaysTotal / saleDaysValues.length,
     grossProfitRate: summary.salesTotal === 0 ? 0 : summary.profitTotal / summary.salesTotal * 100
   };
@@ -1066,7 +1079,11 @@ function renderKpiSummary(filteredSales) {
   averageCostPrice.textContent = formatYen(kpi.averageCostPrice);
   averageShippingFee.textContent = formatYen(kpi.averageShippingFee);
   averageFee.textContent = formatYen(kpi.averageFee);
+  kpiFeeRate.textContent = formatPercent(kpi.feeRate);
+  kpiShippingRate.textContent = formatPercent(kpi.shippingRate);
+  kpiCostRate.textContent = formatPercent(kpi.costRate);
   averageProfit.textContent = formatYen(kpi.averageProfit);
+  averageDeposit.textContent = formatYen(kpi.averageDeposit);
   averageSaleDays.textContent = formatAverageSaleDays(kpi.averageSaleDays);
   grossProfitRate.textContent = formatPercent(kpi.grossProfitRate);
 }
