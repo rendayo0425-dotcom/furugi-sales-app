@@ -541,13 +541,13 @@ button:active {
 
 .daily-sales-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .daily-sales-item {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px 12px;
   border: 1px solid #d9e1e8;
   border-radius: 8px;
   background: #f7fafc;
@@ -562,54 +562,40 @@ button:active {
 
 .daily-sales-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .daily-sales-count {
-  padding: 5px 9px;
+  padding: 4px 8px;
   border-radius: 999px;
   color: #146c5f;
   background: #dff3ee;
+  font-size: 13px;
   white-space: nowrap;
 }
 
-.daily-main-grid,
-.daily-detail-grid {
+.daily-main-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.daily-main-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.daily-detail-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.daily-main-number,
-.daily-detail-number {
-  padding: 10px;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
 .daily-main-number {
+  padding: 8px;
+  border-radius: 8px;
   background: #edf7f4;
 }
 
-.daily-main-number span,
-.daily-detail-number span {
+.daily-main-number span {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   color: #5f6c7b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.daily-main-number strong,
-.daily-detail-number strong {
-  font-size: 15px;
+.daily-main-number strong {
+  font-size: 14px;
 }
 
 /* 販路別集計のカードです */
@@ -1268,8 +1254,7 @@ button:active {
   .monthly-number-grid,
   .weekly-main-grid,
   .weekly-detail-grid,
-  .daily-main-grid,
-  .daily-detail-grid {
+  .daily-main-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
@@ -1281,8 +1266,7 @@ button:active {
   .detail-number,
   .weekly-main-number,
   .weekly-detail-number,
-  .daily-main-number,
-  .daily-detail-number {
+  .daily-main-number {
     padding: 10px;
     border-radius: 8px;
   }

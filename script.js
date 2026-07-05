@@ -1272,7 +1272,7 @@ function renderWeeklyReport(filteredSales) {
   });
 }
 
-// 選択中の月の売上を、販売日ごとにカード表示します
+// 選択中の月の売上を、販売日ごとにコンパクト表示します
 function renderDailySales(filteredSales) {
   const dailyGroups = getDailySalesGroups(filteredSales);
 
@@ -1307,10 +1307,10 @@ function renderDailySales(filteredSales) {
     const mainGrid = document.createElement("div");
     mainGrid.className = "daily-main-grid";
 
+    // 日別売上は毎日見る場所なので、必要な3項目だけに絞ります
     const mainItems = [
       ["売上合計", formatYen(metrics.salesTotal)],
-      ["利益合計", formatYen(metrics.profitTotal), metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus"],
-      ["登録件数", `${metrics.count}件`]
+      ["利益合計", formatYen(metrics.profitTotal), metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus"]
     ];
 
     mainItems.forEach(function (item) {
@@ -1331,37 +1331,7 @@ function renderDailySales(filteredSales) {
       mainGrid.appendChild(box);
     });
 
-    const detailGrid = document.createElement("div");
-    detailGrid.className = "daily-detail-grid";
-
-    const detailItems = [
-      ["原価合計", formatYen(metrics.costTotal)],
-      ["送料合計", formatYen(metrics.shippingTotal)],
-      ["手数料合計", formatYen(metrics.feeTotal)],
-      ["平均売価", formatYen(metrics.averageSalePrice)],
-      ["平均利益", formatYen(metrics.averageProfit)],
-      ["平均利益率", formatPercent(metrics.averageProfitRate)],
-      ["原価率", formatPercent(metrics.costRate)],
-      ["送料率", formatPercent(metrics.shippingRate)],
-      ["手数料率", formatPercent(metrics.feeRate)],
-      ["平均入金額", formatYen(metrics.averageDeposit)]
-    ];
-
-    detailItems.forEach(function (item) {
-      const box = document.createElement("div");
-      box.className = "daily-detail-number";
-
-      const label = document.createElement("span");
-      label.textContent = item[0];
-
-      const value = document.createElement("strong");
-      value.textContent = item[1];
-
-      box.append(label, value);
-      detailGrid.appendChild(box);
-    });
-
-    card.append(header, mainGrid, detailGrid);
+    card.append(header, mainGrid);
     dailySalesList.appendChild(card);
   });
 }
