@@ -45,6 +45,12 @@ const csvFileInput = document.getElementById("csvFileInput");
 const searchInput = document.getElementById("searchInput");
 const channelFilter = document.getElementById("channelFilter");
 const sortSelect = document.getElementById("sortSelect");
+const includeAiItemDetails = document.getElementById("includeAiItemDetails");
+const includeAiMemos = document.getElementById("includeAiMemos");
+const copyAiAnalysisButton = document.getElementById("copyAiAnalysisButton");
+const refreshAiPreviewButton = document.getElementById("refreshAiPreviewButton");
+const aiCopyStatus = document.getElementById("aiCopyStatus");
+const aiAnalysisPreview = document.getElementById("aiAnalysisPreview");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -76,6 +82,15 @@ let imageDeleteRequested = false;
 
 // 販路別集計で表示する販路の一覧です
 const salesChannels = ["メルカリメイン", "メルカリサブ", "ヤフー", "ラクマ"];
+const weekdays = [
+  { name: "日曜日", shortName: "日" },
+  { name: "月曜日", shortName: "月" },
+  { name: "火曜日", shortName: "火" },
+  { name: "水曜日", shortName: "水" },
+  { name: "木曜日", shortName: "木" },
+  { name: "金曜日", shortName: "金" },
+  { name: "土曜日", shortName: "土" }
+];
 
 // CSVに出力する列の名前です。画像データは重いので含めません
 const csvHeaders = [
@@ -810,6 +825,260 @@ function calculateWeeklyMetrics(targetSales) {
   };
 }
 
+// 日付から曜日の番号を取得します
+function getWeekdayIndex(dateText) {
+  const dateValue = parseDateText(dateText);
+  return dateValue ? dateValue.getDay() : null;
+}
+
+// AI分析用に、曜日ごとの売上をまとめます
+function getWeekdaySalesGroups(targetSales) {
+  return weekdays.map(function (weekday, index) {
+    const weekdaySales = targetSales.filter(function (sale) {
+      return getWeekdayIndex(sale.saleDate) === index;
+    });
+
+    return {
+      label: weekday.name,
+      shortLabel: weekday.shortName,
+      sales: weekdaySales,
+      metrics: calculateWeeklyMetrics(weekdaySales)
+    };
+  });
+}
+
+// AI分析用に、月初から月末までのタイミング別に売上をまとめます
+function getMonthTimingGroups(targetSales, monthText) {
+  return getWeeklyRanges(monthText).map(function (range) {
+    const timingSales = targetSales.filter(function (sale) {
+      const saleDay = Number(String(sale.saleDate || "").slice(8, 10));
+      return saleDay >= range.startDay && saleDay <= range.endDay;
+    });
+
+    return {
+      label: range.label,
+      period: `${range.startDay}日〜${range.endDay}日`,
+      sales: timingSales,
+      metrics: calculateWeeklyMetrics(timingSales)
+    };
+  });
+}
+
+// AIに渡す集計行を、読みやすい1行にします
+function formatAiMetricsLine(label, metrics) {
+  return `${label}: 売上 ${formatYen(metrics.salesTotal)} / 利益 ${formatYen(metrics.profitTotal)} / 件数 ${metrics.count}件 / 平均売価 ${formatYen(metrics.averageSalePrice)} / 平均利益率 ${formatPercent(metrics.averageProfitRate)}`;
+}
+
+// 月ごとの季節・給料日・ボーナスなど、AIに読ませたい参照文脈を作ります
+function getAiContextNotes(monthText) {
+  const monthNumber = Number(monthText.split("-")[1]);
+  const baseNotes = [
+    "月初、月中、月末で購買行動が変わる可能性があります。",
+    "25日前後は給料日後の購買増加が起きる可能性があります。",
+    "曜日別では金曜日、土曜日、日曜日の購買傾向に注目してください。"
+  ];
+  const monthNotes = {
+    1: [
+      "1月は正月後、初売り後、冬物需要、年始の財布の引き締めが混在しやすい時期です。"
+    ],
+    2: [
+      "2月は冬物終盤で、春物への切り替え前の在庫整理や値下げ反応が出やすい時期です。"
+    ],
+    3: [
+      "3月は春物、卒業・新生活、引っ越し前後の購買が影響しやすい時期です。"
+    ],
+    4: [
+      "4月は新生活と春物需要が続き、ライトアウターやシャツ類の動きに注目したい時期です。"
+    ],
+    5: [
+      "5月は連休、初夏需要、半袖や薄手商品の反応が出始める時期です。"
+    ],
+    6: [
+      "6月は夏前の時期で、半袖、薄手、リネン、Tシャツ、ショーツなど季節商品の影響が出やすい可能性があります。",
+      "6月後半から7月にかけて夏のボーナス時期が近づくため、高単価商品の動きに影響がある可能性があります。"
+    ],
+    7: [
+      "7月は夏物本番と夏のボーナス時期が重なり、高単価商品や即戦力の夏物に注目したい時期です。"
+    ],
+    8: [
+      "8月は夏物終盤で、暑さによる需要と秋物への切り替え前の動きが混在しやすい時期です。"
+    ],
+    9: [
+      "9月は秋物への切り替え時期で、長袖、ライトアウター、色味の変化に注目したい時期です。"
+    ],
+    10: [
+      "10月は秋物本番で、アウター手前の商品や重ね着向き商品の反応が出やすい時期です。"
+    ],
+    11: [
+      "11月は冬物需要が強まり、アウター、ニット、スウェットなど単価が上がりやすい時期です。"
+    ],
+    12: [
+      "12月は冬物本番、年末需要、冬のボーナス時期が重なり、高単価商品やギフト的な購買にも注目したい時期です。"
+    ]
+  };
+
+  return [...baseNotes, ...(monthNotes[monthNumber] || [])];
+}
+
+// AI分析用の商品明細を作ります
+function buildAiItemDetailLines(targetSales, includeMemos) {
+  const sortedSales = [...targetSales].sort(function (firstSale, secondSale) {
+    const dateCompare = String(firstSale.saleDate).localeCompare(String(secondSale.saleDate));
+    return dateCompare || Number(firstSale.id || 0) - Number(secondSale.id || 0);
+  });
+
+  if (sortedSales.length === 0) {
+    return ["商品明細: なし"];
+  }
+
+  return sortedSales.map(function (sale, index) {
+    const saleDays = Number.isFinite(sale.saleDays)
+      ? sale.saleDays
+      : calculateSaleDays(sale.saleDate, sale.purchaseDate);
+    const weekdayIndex = getWeekdayIndex(sale.saleDate);
+    const weekdayLabel = weekdayIndex === null ? "-" : weekdays[weekdayIndex].shortName;
+    const memoText = includeMemos && sale.memo ? ` / メモ: ${sale.memo.replace(/\s+/g, " ")}` : "";
+
+    return `${index + 1}. ${sale.saleDate}(${weekdayLabel}) / ${sale.salesChannel} / ${sale.itemName} / 売値 ${formatYen(sale.salePrice)} / 原価 ${formatYen(sale.costPrice)} / 送料 ${formatYen(sale.shippingFee)} / 手数料 ${formatYen(sale.fee)} / 利益 ${formatYen(sale.profit)} / 利益率 ${formatPercent(Number(sale.profitRate || 0))} / 販売日数 ${formatSaleDays(saleDays)}${memoText}`;
+  });
+}
+
+// 表示中の月の売上データから、AIへ貼り付ける分析依頼文を作ります
+function buildAiAnalysisText(targetSales) {
+  const selectedMonth = monthFilterInput.value;
+  const summary = calculateSummary(targetSales);
+  const kpi = calculateKpi(targetSales);
+  const weekdayGroups = getWeekdaySalesGroups(targetSales);
+  const timingGroups = getMonthTimingGroups(targetSales, selectedMonth);
+  const contextNotes = getAiContextNotes(selectedMonth);
+  const includeDetails = includeAiItemDetails.checked;
+  const includeMemos = includeAiMemos.checked;
+  const channelLines = salesChannels.map(function (channelName) {
+    const channelSales = targetSales.filter(function (sale) {
+      return sale.salesChannel === channelName;
+    });
+    return formatAiMetricsLine(channelName, calculateWeeklyMetrics(channelSales));
+  });
+  const itemDetailLines = includeDetails
+    ? buildAiItemDetailLines(targetSales, includeMemos)
+    : ["商品明細: 省略"];
+
+  return [
+    "あなたは古着販売の売上分析担当です。",
+    "以下の売上データをもとに、販売傾向・利益改善・出品戦略を分析してください。",
+    "",
+    "特に見てほしいこと:",
+    "1. 曜日ごとの売れやすさ、特に金曜日の傾向",
+    "2. 月初・中旬・月末の違い",
+    "3. 給料日やボーナス時期に近い影響",
+    "4. 季節要因と商品ジャンルの相性",
+    "5. 販路ごとの強みと弱み",
+    "6. 利益率が高い商品の特徴",
+    "7. 利益を下げている要因",
+    "8. 次月に取るべき具体的な出品・値付け・仕入れの行動",
+    "",
+    `対象期間: ${formatMonthLabel(selectedMonth)}`,
+    "",
+    "参照条件:",
+    ...contextNotes.map(function (note) {
+      return `- ${note}`;
+    }),
+    "",
+    "全体集計:",
+    `- 売上合計: ${formatYen(summary.salesTotal)}`,
+    `- 原価合計: ${formatYen(summary.costTotal)}`,
+    `- 送料合計: ${formatYen(summary.shippingTotal)}`,
+    `- 手数料合計: ${formatYen(summary.feeTotal)}`,
+    `- 利益合計: ${formatYen(summary.profitTotal)}`,
+    `- 平均利益率: ${formatPercent(summary.averageRate)}`,
+    `- 粗利率: ${formatPercent(kpi.grossProfitRate)}`,
+    `- 登録件数: ${summary.count}件`,
+    `- 平均売価: ${formatYen(kpi.averageSalePrice)}`,
+    `- 平均原価: ${formatYen(kpi.averageCostPrice)}`,
+    `- 平均送料: ${formatYen(kpi.averageShippingFee)}`,
+    `- 平均利益: ${formatYen(kpi.averageProfit)}`,
+    `- 平均販売日数: ${formatAverageSaleDays(kpi.averageSaleDays)}`,
+    "",
+    "曜日別集計:",
+    ...weekdayGroups.map(function (group) {
+      return `- ${formatAiMetricsLine(group.label, group.metrics)}`;
+    }),
+    "",
+    "月内タイミング別集計:",
+    ...timingGroups.map(function (group) {
+      return `- ${formatAiMetricsLine(`${group.label} (${group.period})`, group.metrics)}`;
+    }),
+    "",
+    "販路別集計:",
+    ...channelLines.map(function (line) {
+      return `- ${line}`;
+    }),
+    "",
+    "商品明細:",
+    ...itemDetailLines,
+    "",
+    "出力してほしい形式:",
+    "1. 重要な発見を5つ",
+    "2. 売れている要因の仮説",
+    "3. 利益を下げている要因",
+    "4. 曜日・月内タイミング・季節要因の解釈",
+    "5. 次月に実行する具体策を優先順位つきで"
+  ].join("\n");
+}
+
+// AI分析用プレビューを、現在の表示月に合わせて更新します
+function renderAiAnalysisPreview() {
+  const filteredSales = getFilteredSales();
+
+  if (filteredSales.length === 0) {
+    aiAnalysisPreview.value = `${formatMonthLabel(monthFilterInput.value)}の売上データがありません。`;
+    return;
+  }
+
+  aiAnalysisPreview.value = buildAiAnalysisText(filteredSales);
+}
+
+function showAiCopyStatus(message, isError = false) {
+  aiCopyStatus.textContent = message;
+  aiCopyStatus.classList.toggle("is-error", isError);
+  aiCopyStatus.style.display = "block";
+}
+
+// クリップボードAPIが使えない環境では、選択コピーにフォールバックします
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  aiAnalysisPreview.focus();
+  aiAnalysisPreview.select();
+
+  if (!document.execCommand("copy")) {
+    throw new Error("copy failed");
+  }
+}
+
+async function copyAiAnalysisText() {
+  const filteredSales = getFilteredSales();
+
+  if (filteredSales.length === 0) {
+    renderAiAnalysisPreview();
+    showAiCopyStatus("表示中の月にコピーできる売上データがありません。", true);
+    return;
+  }
+
+  const text = buildAiAnalysisText(filteredSales);
+  aiAnalysisPreview.value = text;
+
+  try {
+    await copyTextToClipboard(text);
+    showAiCopyStatus("AI分析用テキストをコピーしました。");
+  } catch (error) {
+    showAiCopyStatus("自動コピーできませんでした。プレビュー欄を選択してコピーしてください。", true);
+  }
+}
+
 // localStorageから登録済みデータを読み込みます
 function loadSales() {
   if (!canUseStorage) {
@@ -1474,6 +1743,7 @@ function renderDashboard() {
   renderWeeklyReport(filteredSales);
   renderDailySales(filteredSales);
   renderChannelSummary(filteredSales);
+  renderAiAnalysisPreview();
   renderSalesList(visibleSales);
 }
 
@@ -1538,6 +1808,23 @@ sortSelect.addEventListener("change", function () {
 // 年度を変えたら、月別サマリーだけを選択年度に切り替えます
 summaryYearSelect.addEventListener("change", function () {
   renderMonthlySummary();
+});
+
+includeAiItemDetails.addEventListener("change", function () {
+  renderAiAnalysisPreview();
+});
+
+includeAiMemos.addEventListener("change", function () {
+  renderAiAnalysisPreview();
+});
+
+refreshAiPreviewButton.addEventListener("click", function () {
+  renderAiAnalysisPreview();
+  showAiCopyStatus("AI分析用プレビューを更新しました。");
+});
+
+copyAiAnalysisButton.addEventListener("click", function () {
+  copyAiAnalysisText();
 });
 
 // 編集をやめたいときは、入力フォームだけを元に戻します

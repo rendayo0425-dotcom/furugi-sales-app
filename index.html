@@ -262,6 +262,38 @@
       </div>
     </section>
 
+    <!-- AIに貼り付ける分析用テキストを、表示中の月のデータから作ります -->
+    <section class="card ai-analysis-card" data-section-id="aiAnalysis">
+      <div class="section-header">
+        <h2>AI分析用コピー</h2>
+        <button class="section-toggle" type="button">− しまう</button>
+      </div>
+      <div class="section-content">
+      <div class="ai-options">
+        <label>
+          <input id="includeAiItemDetails" type="checkbox" checked>
+          商品明細を含める
+        </label>
+        <label>
+          <input id="includeAiMemos" type="checkbox" checked>
+          メモを含める
+        </label>
+      </div>
+
+      <div class="ai-actions">
+        <button id="copyAiAnalysisButton" type="button">表示中の月をAI分析用にコピー</button>
+        <button id="refreshAiPreviewButton" class="secondary-button" type="button">プレビュー更新</button>
+      </div>
+
+      <p id="aiCopyStatus" class="ai-copy-status" role="status"></p>
+
+      <label for="aiAnalysisPreview">
+        コピーされる内容
+        <textarea id="aiAnalysisPreview" class="field ai-analysis-preview" rows="16" readonly></textarea>
+      </label>
+      </div>
+    </section>
+
     <!-- 登録済みデータを月ごとにまとめたサマリーです -->
     <section class="card monthly-summary-card" data-section-id="monthlySummary">
       <div class="section-header">
