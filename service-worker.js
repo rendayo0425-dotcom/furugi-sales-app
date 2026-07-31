@@ -1,16 +1,16 @@
 // キャッシュ名を変えると、古いキャッシュを削除して新しいファイルを使いやすくなります。
 // HTML/CSS/JSを大きく変更したのに反映されないときは、末尾の番号を1つ増やしてください。
 const CACHE_PREFIX = "used-clothes-sales-";
-const CACHE_NAME = "used-clothes-sales-v10";
+const CACHE_NAME = "used-clothes-sales-v11";
 
 // オフラインでも最低限アプリ画面を開けるように、基本ファイルだけ保存します。
 // 画像やCSVは容量が大きくなりやすいので、ここではキャッシュしません。
 const APP_FILES = [
   "./",
   "./index.html",
-  "./style.css",
-  "./script.js",
-  "./manifest.json",
+  "./style.css?v=20260801-1",
+  "./script.js?v=20260801-1",
+  "./manifest.json?v=20260801-1",
   "./icon-192.png",
   "./icon-512.png",
   "./favicon.png"
@@ -20,7 +20,12 @@ const APP_FILES = [
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(APP_FILES);
+      // SafariのHTTPキャッシュではなく、配信元の最新ファイルを取得します。
+      const requests = APP_FILES.map(function (filePath) {
+        return new Request(filePath, { cache: "reload" });
+      });
+
+      return cache.addAll(requests);
     })
   );
 
@@ -57,7 +62,8 @@ self.addEventListener("fetch", function (event) {
   }
 
   event.respondWith(
-    fetch(event.request)
+    // GitHub Pagesの短期HTTPキャッシュも回避し、通信時は必ず最新版を確認します。
+    fetch(new Request(event.request, { cache: "no-store" }))
       .then(function (response) {
         // 正常に取得できた同じサイト内のファイルだけキャッシュします。
         if (!response || response.status !== 200 || response.type !== "basic") {

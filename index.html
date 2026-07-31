@@ -4,14 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>古着売上管理</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json?v=20260801-1">
   <meta name="theme-color" content="#FF3B0A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="古着売上管理">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" type="image/png" href="favicon.png">
-  <link rel="stylesheet" href="style.css">
+  <!-- CSSが一時的に読み込めない場合でも、アイコン定義が黒い四角として表示されるのを防ぎます -->
+  <style>
+    html,
+    body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    .icon-sprite {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+  </style>
+  <!-- 版番号を付け、iPhone PWAが更新前のCSSを再利用しないようにします -->
+  <link rel="stylesheet" href="style.css?v=20260801-1">
 </head>
 <body>
   <!-- 外部通信なしで使える、Lucideをもとにした共通アイコンです -->
@@ -423,12 +439,17 @@
     <a href="#data/list" data-nav-group="data"><svg class="ui-icon" aria-hidden="true"><use href="#icon-table"></use></svg><span>データ</span></a>
   </nav>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=20260801-1"></script>
   <script>
     // Service Workerの登録に失敗しても、アプリ本体はそのまま利用できます
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./service-worker.js").catch(function (error) {
+        navigator.serviceWorker.register("./service-worker.js?v=11", {
+          // SafariのHTTPキャッシュを使わず、Service Worker本体の更新を確認します。
+          updateViaCache: "none"
+        }).then(function (registration) {
+          return registration.update();
+        }).catch(function (error) {
           console.warn("Service Workerを登録できませんでした。", error);
         });
       });
