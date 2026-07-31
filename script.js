@@ -91,6 +91,18 @@ const channelCompositionChart = document.getElementById("channelCompositionChart
 const channelCompositionTotal = document.getElementById("channelCompositionTotal");
 const channelCompositionLegend = document.getElementById("channelCompositionLegend");
 const channelRateComparison = document.getElementById("channelRateComparison");
+const monthlyChart = document.getElementById("monthlyChart");
+const aiSummarySales = document.getElementById("aiSummarySales");
+const aiSummaryProfit = document.getElementById("aiSummaryProfit");
+const aiSummaryCount = document.getElementById("aiSummaryCount");
+const placeholderSaleImage = document.getElementById("placeholderSaleImage");
+const placeholderSaleMeta = document.getElementById("placeholderSaleMeta");
+const placeholderSaleName = document.getElementById("placeholderSaleName");
+const placeholderSalePrice = document.getElementById("placeholderSalePrice");
+const placeholderSaleProfit = document.getElementById("placeholderSaleProfit");
+const placeholderSaleProfitRate = document.getElementById("placeholderSaleProfitRate");
+const placeholderEditButton = document.getElementById("placeholderEditButton");
+const placeholderDeleteButton = document.getElementById("placeholderDeleteButton");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -119,6 +131,9 @@ let storageLoadBlocked = false;
 
 // 編集中の商品idです。nullのときは新規登録モードです
 let editingSaleId = null;
+
+// 第4段階までの暫定商品詳細で表示している商品idです
+let placeholderSaleId = null;
 
 // 選択中の画像をリサイズしたBase64文字列として一時的に入れておきます
 let resizedImageData = "";
@@ -1280,10 +1295,16 @@ function getCurrentRoute() {
     "analysis/daily",
     "analysis/channel",
     "analysis/monthly",
-    "data/list"
+    "analysis/ai",
+    "data/list",
+    "data/manage"
   ];
 
-  return supportedRoutes.includes(route) ? route : "home";
+  if (supportedRoutes.includes(route) || /^data\/sale\/.+/.test(route)) {
+    return route;
+  }
+
+  return "home";
 }
 
 function getRouteGroup(route) {
@@ -1312,11 +1333,20 @@ function getRouteTitle(route) {
     "analysis/weekly": "週間レポート",
     "analysis/daily": "日別売上",
     "analysis/channel": "販路別分析",
-    "analysis/monthly": "月別サマリー"
+    "analysis/monthly": "月別サマリー",
+    "analysis/ai": "AI分析用コピー"
   };
 
   if (analysisTitles[route]) {
     return analysisTitles[route];
+  }
+
+  if (route === "data/manage") {
+    return "データ管理";
+  }
+
+  if (route.startsWith("data/sale/")) {
+    return "商品詳細";
   }
 
   return "売上データ";
@@ -1329,7 +1359,9 @@ function showRoute(options = {}) {
   appViews.forEach(function (view) {
     const directRoute = view.dataset.route;
     const groupedRoutes = String(view.dataset.routes || "").split(" ").filter(Boolean);
-    view.hidden = directRoute !== route && !groupedRoutes.includes(route);
+    const routePattern = view.dataset.routePattern;
+    const matchesPattern = routePattern ? route.startsWith(routePattern) : false;
+    view.hidden = directRoute !== route && !groupedRoutes.includes(route) && !matchesPattern;
   });
 
   routeTitle.textContent = getRouteTitle(route);
@@ -1356,17 +1388,11 @@ function showRoute(options = {}) {
     }
   });
 
-  // 暫定分析画面は同じDOMなので、選択した項目まで移動します
-  const legacyTargets = {
-    "analysis/monthly": "monthlySection"
-  };
-  const targetId = legacyTargets[route];
+  if (route.startsWith("data/sale/")) {
+    renderSalePlaceholderRoute(route);
+  }
 
-  if (targetId && !options.skipScroll) {
-    requestAnimationFrame(function () {
-      document.getElementById(targetId).scrollIntoView({ block: "start" });
-    });
-  } else if (!options.skipScroll) {
+  if (!options.skipScroll) {
     window.scrollTo({ top: 0, behavior: "auto" });
   }
 }
@@ -1601,6 +1627,17 @@ function buildAiAnalysisText(targetSales) {
 // AI分析用プレビューを、現在の表示月に合わせて更新します
 function renderAiAnalysisPreview() {
   const filteredSales = getFilteredSales();
+  const summary = calculateSummary(filteredSales);
+
+  // 対象月や出力条件が変わったら、以前のコピー完了表示はいったん消します
+  aiCopyStatus.textContent = "";
+  aiCopyStatus.style.display = "none";
+  aiCopyStatus.classList.remove("is-error");
+
+  // AIへ渡す文章と同じ対象月の数字を、画面上でも先に確認できるようにします
+  aiSummarySales.textContent = formatYen(summary.salesTotal);
+  aiSummaryProfit.textContent = formatYen(summary.profitTotal);
+  aiSummaryCount.textContent = `${summary.count}件`;
 
   if (filteredSales.length === 0) {
     aiAnalysisPreview.value = `${formatMonthLabel(monthFilterInput.value)}の売上データがありません。`;
@@ -2179,53 +2216,51 @@ function startEditSale(id) {
   });
 }
 
-// 1つの商品カードを作ります
+// 一覧画面用の、詳細画面へ移動できるコンパクトな商品行を作ります
 function createSaleCard(sale) {
   const card = document.createElement("article");
-  card.className = "sale-card";
-  const saleDays = Number.isFinite(sale.saleDays)
-    ? sale.saleDays
-    : calculateSaleDays(sale.saleDate, sale.purchaseDate);
+  card.className = "sales-list-item";
 
-  const compactRow = document.createElement("div");
-  compactRow.className = "sale-compact-row";
+  const link = document.createElement("a");
+  link.className = "sales-list-link";
+  link.href = `#data/sale/${encodeURIComponent(String(sale.id))}`;
+  link.setAttribute("aria-label", `${sale.itemName}の詳細を見る`);
 
   // 画像ありならサムネイル、画像なしなら分かりやすい枠を表示します
   if (sale.imageData) {
     const image = document.createElement("img");
-    image.className = "sale-image";
+    image.className = "sales-list-image";
     image.src = sale.imageData;
     image.alt = `${sale.itemName}の商品画像`;
-    compactRow.appendChild(image);
+    link.appendChild(image);
   } else {
     const noImage = document.createElement("div");
     noImage.className = "sale-no-image";
     noImage.textContent = "画像なし";
-    compactRow.appendChild(noImage);
+    link.appendChild(noImage);
   }
 
   const mainInfo = document.createElement("div");
-  mainInfo.className = "sale-main-info";
+  mainInfo.className = "sales-list-main";
 
   const meta = document.createElement("div");
-  meta.className = "sale-meta";
+  meta.className = "sales-list-meta";
 
   const date = document.createElement("span");
-  date.className = "sale-date";
-  date.textContent = sale.saleDate;
+  date.textContent = sale.saleDate || "-";
 
   const channel = document.createElement("span");
-  channel.className = "sale-channel";
+  channel.className = "sales-list-channel";
   channel.textContent = sale.salesChannel;
 
   meta.append(date, channel);
 
   const title = document.createElement("h3");
-  title.className = "sale-title";
+  title.className = "sales-list-name";
   title.textContent = sale.itemName;
 
   const compactNumbers = document.createElement("div");
-  compactNumbers.className = "sale-compact-numbers";
+  compactNumbers.className = "sales-list-values";
 
   const compactNumberItems = [
     ["売値", formatYen(sale.salePrice)],
@@ -2235,7 +2270,7 @@ function createSaleCard(sale) {
 
   compactNumberItems.forEach(function (item) {
     const box = document.createElement("div");
-    box.className = "compact-number";
+    box.className = "sales-list-value";
 
     const label = document.createElement("span");
     label.textContent = item[0];
@@ -2252,92 +2287,65 @@ function createSaleCard(sale) {
   });
 
   mainInfo.append(meta, title, compactNumbers);
-  compactRow.appendChild(mainInfo);
+  link.appendChild(mainInfo);
 
-  const details = document.createElement("div");
-  details.className = "sale-details";
-  details.hidden = true;
-
-  const detailNumbers = document.createElement("div");
-  detailNumbers.className = "sale-detail-numbers";
-
-  const numberItems = [
-    ["仕入日", sale.purchaseDate || "-"],
-    ["販売日数", formatSaleDays(saleDays)],
-    ["原価", formatYen(sale.costPrice)],
-    ["送料", formatYen(sale.shippingFee)],
-    ["手数料", formatYen(sale.fee)],
-    ["販売手数料率", formatPercent(Number(sale.feeRate || 0))]
-  ];
-
-  numberItems.forEach(function (item) {
-    const box = document.createElement("div");
-    box.className = "detail-number";
-
-    const label = document.createElement("span");
-    label.textContent = item[0];
-
-    const value = document.createElement("strong");
-    value.textContent = item[1];
-
-    if (item[2]) {
-      value.className = item[2];
-    }
-
-    box.append(label, value);
-    detailNumbers.appendChild(box);
-  });
-
-  details.appendChild(detailNumbers);
-
-  const actionArea = document.createElement("div");
-  actionArea.className = "sale-actions";
-
-  const editButton = document.createElement("button");
-  editButton.className = "edit-button";
-  editButton.type = "button";
-  editButton.textContent = "編集";
-
-  // 編集ボタンが押されたら、この商品の内容を入力フォームに戻します
-  editButton.addEventListener("click", function () {
-    startEditSale(sale.id);
-  });
-
-  const deleteButton = document.createElement("button");
-  deleteButton.className = "delete-button";
-  deleteButton.type = "button";
-  deleteButton.textContent = "削除";
-
-  // 削除ボタンが押されたら、この商品のidを使って削除します
-  deleteButton.addEventListener("click", function () {
-    deleteSale(sale.id);
-  });
-
-  actionArea.append(editButton, deleteButton);
-
-  const memo = document.createElement("p");
-  memo.className = "sale-memo";
-  memo.textContent = sale.memo || "メモなし";
-  details.appendChild(memo);
-
-  details.appendChild(actionArea);
-
-  const detailButton = document.createElement("button");
-  detailButton.className = "detail-toggle-button";
-  detailButton.type = "button";
-  detailButton.textContent = "詳細";
-
-  // 詳細ボタンで、原価・送料・手数料・メモ・編集削除ボタンを開閉します
-  detailButton.addEventListener("click", function () {
-    const isOpening = details.hidden;
-    details.hidden = !isOpening;
-    detailButton.textContent = isOpening ? "閉じる" : "詳細";
-  });
-
-  compactRow.appendChild(detailButton);
-  card.append(compactRow, details);
+  const arrow = document.createElement("span");
+  arrow.className = "sales-list-arrow";
+  arrow.textContent = "›";
+  arrow.setAttribute("aria-hidden", "true");
+  link.appendChild(arrow);
+  card.appendChild(link);
 
   return card;
+}
+
+// URLに含まれる商品idを、安全に文字列へ戻します
+function getSaleIdFromRoute(route) {
+  try {
+    return decodeURIComponent(route.slice("data/sale/".length));
+  } catch (error) {
+    return "";
+  }
+}
+
+// 第4段階まで、商品詳細への入口を編集・削除可能な暫定画面で受け止めます
+function renderSalePlaceholderRoute(route) {
+  const saleIdText = getSaleIdFromRoute(route);
+  const sale = sales.find(function (targetSale) {
+    return String(targetSale.id) === saleIdText;
+  });
+
+  placeholderSaleImage.innerHTML = "";
+  placeholderSaleId = sale ? sale.id : null;
+
+  if (!sale) {
+    placeholderSaleImage.textContent = "画像なし";
+    placeholderSaleMeta.textContent = "";
+    placeholderSaleName.textContent = "商品が見つかりません";
+    placeholderSalePrice.textContent = "0円";
+    placeholderSaleProfit.textContent = "0円";
+    placeholderSaleProfitRate.textContent = "0.0%";
+    placeholderEditButton.disabled = true;
+    placeholderDeleteButton.disabled = true;
+    return;
+  }
+
+  if (sale.imageData) {
+    const image = document.createElement("img");
+    image.src = sale.imageData;
+    image.alt = `${sale.itemName}の商品画像`;
+    placeholderSaleImage.appendChild(image);
+  } else {
+    placeholderSaleImage.textContent = "画像なし";
+  }
+
+  placeholderSaleMeta.textContent = `${sale.saleDate || "-"} / ${sale.salesChannel || "-"}`;
+  placeholderSaleName.textContent = sale.itemName || "商品名なし";
+  placeholderSalePrice.textContent = formatYen(sale.salePrice);
+  placeholderSaleProfit.textContent = formatYen(sale.profit);
+  placeholderSaleProfitRate.textContent = formatPercent(Number(sale.profitRate || 0));
+  placeholderEditButton.disabled = false;
+  placeholderDeleteButton.disabled = false;
 }
 
 // ホーム画面へ、主要実績・販売速度・最近の売上・日次推移をまとめて表示します
@@ -2751,12 +2759,142 @@ function renderChannelSummary(filteredSales) {
   channelRateComparison.appendChild(overallRow);
 }
 
-// 月別サマリーを画面に表示します
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+// 外部ライブラリなしで、アクセシブルな月次SVGグラフの部品を作ります
+function createSvgElement(elementName, attributes = {}) {
+  const element = document.createElementNS(SVG_NAMESPACE, elementName);
+
+  Object.entries(attributes).forEach(function (entry) {
+    element.setAttribute(entry[0], String(entry[1]));
+  });
+
+  return element;
+}
+
+function renderMonthlyChart(selectedYear, monthlyGroups) {
+  monthlyChart.innerHTML = "";
+  const groupMap = new Map(monthlyGroups.map(function (group) {
+    return [Number(group.month.slice(5, 7)), group.summary];
+  }));
+  const values = Array.from({ length: 12 }, function (_, index) {
+    const summary = groupMap.get(index + 1) || calculateSummary([]);
+    return {
+      month: index + 1,
+      sales: summary.salesTotal,
+      profit: summary.profitTotal
+    };
+  });
+  const maximumValue = Math.max(1, ...values.flatMap(function (value) {
+    return [value.sales, value.profit];
+  }));
+  const plotLeft = 48;
+  const plotRight = 704;
+  const plotTop = 30;
+  const plotBottom = 252;
+  const plotHeight = plotBottom - plotTop;
+  const step = (plotRight - plotLeft) / 12;
+
+  const title = createSvgElement("title");
+  title.textContent = `${selectedYear}年の月別売上と利益`;
+  monthlyChart.appendChild(title);
+
+  // 補助線と金額目盛りを先に描き、棒と折れ線が読み取りやすいようにします
+  [0, 0.25, 0.5, 0.75, 1].forEach(function (ratio) {
+    const y = plotBottom - plotHeight * ratio;
+    const line = createSvgElement("line", {
+      x1: plotLeft,
+      y1: y,
+      x2: plotRight,
+      y2: y,
+      class: "monthly-grid-line"
+    });
+    const label = createSvgElement("text", {
+      x: plotLeft - 8,
+      y: y + 4,
+      "text-anchor": "end",
+      class: "monthly-axis-label"
+    });
+    const labelValue = maximumValue * ratio;
+    label.textContent = labelValue === 0
+      ? "0"
+      : labelValue >= 100000
+        ? `${Math.round(labelValue / 10000)}万`
+        : Math.round(labelValue).toLocaleString();
+    monthlyChart.append(line, label);
+  });
+
+  const profitPoints = [];
+
+  values.forEach(function (value, index) {
+    const centerX = plotLeft + step * index + step / 2;
+    const salesHeight = value.sales / maximumValue * plotHeight;
+    const salesBar = createSvgElement("rect", {
+      x: centerX - Math.min(16, step * 0.3),
+      y: plotBottom - salesHeight,
+      width: Math.min(32, step * 0.6),
+      height: salesHeight,
+      rx: 3,
+      class: "monthly-sales-bar"
+    });
+    const barTitle = createSvgElement("title");
+    barTitle.textContent = `${value.month}月 売上 ${formatYen(value.sales)}`;
+    salesBar.appendChild(barTitle);
+
+    const profitY = plotBottom - value.profit / maximumValue * plotHeight;
+    profitPoints.push(`${centerX},${profitY}`);
+
+    const monthLabel = createSvgElement("text", {
+      x: centerX,
+      y: 278,
+      "text-anchor": "middle",
+      class: "monthly-month-label"
+    });
+    monthLabel.textContent = `${value.month}月`;
+    monthlyChart.append(salesBar, monthLabel);
+  });
+
+  const profitLine = createSvgElement("polyline", {
+    points: profitPoints.join(" "),
+    class: "monthly-profit-line"
+  });
+  monthlyChart.appendChild(profitLine);
+
+  values.forEach(function (value, index) {
+    const centerX = plotLeft + step * index + step / 2;
+    const profitY = plotBottom - value.profit / maximumValue * plotHeight;
+    const point = createSvgElement("circle", {
+      cx: centerX,
+      cy: profitY,
+      r: 4,
+      class: "monthly-profit-point"
+    });
+    const pointTitle = createSvgElement("title");
+    pointTitle.textContent = `${value.month}月 利益 ${formatYen(value.profit)}`;
+    point.appendChild(pointTitle);
+    monthlyChart.appendChild(point);
+  });
+
+  const populatedValues = values.filter(function (value) {
+    return value.sales !== 0 || value.profit !== 0;
+  });
+  monthlyChart.setAttribute(
+    "aria-label",
+    populatedValues.length === 0
+      ? `${selectedYear}年の売上データはありません`
+      : `${selectedYear}年の月別売上と利益。${populatedValues.map(function (value) {
+        return `${value.month}月、売上${formatYen(value.sales)}、利益${formatYen(value.profit)}`;
+      }).join("。")}`
+  );
+}
+
+// 月別サマリーをグラフと新しい月順のカードで表示します
 function renderMonthlySummary() {
   monthlySummaryList.innerHTML = "";
   updateSummaryYearOptions();
   const selectedYear = summaryYearSelect.value;
   const monthlyGroups = getMonthlySummaryGroups(selectedYear);
+  renderMonthlyChart(selectedYear, monthlyGroups);
 
   if (monthlyGroups.length === 0) {
     const empty = document.createElement("p");
@@ -2771,6 +2909,7 @@ function renderMonthlySummary() {
     const button = document.createElement("button");
     button.className = "monthly-summary-item";
     button.type = "button";
+    button.setAttribute("aria-label", `${formatMonthLabel(monthlyGroup.month)}を表示する月に設定`);
 
     const title = document.createElement("h3");
     title.className = "monthly-summary-title";
@@ -2778,24 +2917,18 @@ function renderMonthlySummary() {
 
     const numberGrid = document.createElement("div");
     numberGrid.className = "monthly-number-grid";
-
     const numberItems = [
-      ["売上合計", formatYen(summary.salesTotal)],
-      ["原価合計", formatYen(summary.costTotal)],
-      ["送料合計", formatYen(summary.shippingTotal)],
-      ["手数料合計", formatYen(summary.feeTotal)],
-      ["利益合計", formatYen(summary.profitTotal), "monthly-strong"],
-      ["平均利益率", formatPercent(summary.totalProfitRate), "monthly-strong"],
-      ["登録件数", `${summary.count}件`]
+      ["売上", formatYen(summary.salesTotal)],
+      ["利益", formatYen(summary.profitTotal), "monthly-strong"],
+      ["利益率", formatPercent(summary.totalProfitRate), "monthly-strong"],
+      ["件数", `${summary.count}件`]
     ];
 
     numberItems.forEach(function (numberItem) {
       const box = document.createElement("div");
       box.className = "monthly-number";
-
       const label = document.createElement("span");
       label.textContent = numberItem[0];
-
       const value = document.createElement("strong");
       value.textContent = numberItem[1];
 
@@ -2807,7 +2940,7 @@ function renderMonthlySummary() {
       numberGrid.appendChild(box);
     });
 
-    // 月別サマリーを押したら、既存の月フィルターをその月に切り替えます
+    // カードを押すと、全画面で共有している表示月を同じ月へ切り替えます
     button.addEventListener("click", function () {
       monthFilterInput.value = monthlyGroup.month;
       renderDashboard();
@@ -2843,6 +2976,10 @@ function renderDashboard() {
   renderChannelSummary(filteredSales);
   renderAiAnalysisPreview();
   renderSalesList(visibleSales);
+
+  if (getCurrentRoute().startsWith("data/sale/")) {
+    renderSalePlaceholderRoute(getCurrentRoute());
+  }
 }
 
 // 指定されたidの商品を削除します
@@ -2949,6 +3086,28 @@ refreshAiPreviewButton.addEventListener("click", function () {
 
 copyAiAnalysisButton.addEventListener("click", function () {
   copyAiAnalysisText();
+});
+
+placeholderEditButton.addEventListener("click", function () {
+  if (placeholderSaleId !== null) {
+    startEditSale(placeholderSaleId);
+  }
+});
+
+placeholderDeleteButton.addEventListener("click", function () {
+  if (placeholderSaleId === null) {
+    return;
+  }
+
+  const deletingId = placeholderSaleId;
+  deleteSale(deletingId);
+
+  // キャンセル時は現在の商品が残るため、詳細画面もそのまま維持します
+  if (!sales.some(function (sale) {
+    return sale.id === deletingId;
+  })) {
+    window.location.hash = "data/list";
+  }
 });
 
 // 編集をやめたいときは、入力フォームだけを元に戻します

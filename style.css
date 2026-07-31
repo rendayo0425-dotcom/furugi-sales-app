@@ -18,6 +18,13 @@
   --app-surface: #ffffff;
   --app-background: #fafafa;
   --app-shadow: 0 1px 3px rgba(17, 21, 29, 0.05);
+  /* 第3段階の分析画面でも、同じ色トークンを短い名前で共有します */
+  --accent: var(--app-accent);
+  --profit: var(--app-success);
+  --danger: var(--app-danger);
+  --ink: var(--app-text);
+  --muted: var(--app-muted);
+  --line: var(--app-border);
   --bottom-nav-height: 78px;
 }
 
@@ -3464,5 +3471,725 @@ body {
     width: 100%;
     height: 46px;
     font-size: 16px;
+  }
+}
+
+/* ===== 第3段階: 月別・AI分析・売上データ一覧 ===== */
+
+.analysis-tool-link,
+.data-manage-link,
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.analysis-tool-link {
+  justify-content: center;
+  width: 100%;
+  margin: 0 0 18px;
+  border: 1px solid #ffd1c5;
+  border-radius: 8px;
+  background: #fff7f4;
+}
+
+.monthly-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 20px 0 14px;
+}
+
+.monthly-toolbar h2 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.summary-year-control select {
+  width: auto;
+  min-width: 132px;
+  height: 46px;
+  padding: 0 36px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background-color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.monthly-chart-card {
+  padding: 20px;
+}
+
+.monthly-chart-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 22px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.monthly-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.monthly-chart-legend i {
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.sales-legend-mark {
+  background: var(--accent);
+}
+
+.profit-legend-mark {
+  position: relative;
+  height: 2px !important;
+  background: var(--profit);
+}
+
+.profit-legend-mark::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--profit);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.monthly-chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.monthly-chart {
+  display: block;
+  width: 100%;
+  min-width: 660px;
+  height: auto;
+}
+
+.monthly-grid-line {
+  stroke: #dfe2e6;
+  stroke-dasharray: 5 5;
+}
+
+.monthly-axis-label,
+.monthly-month-label {
+  fill: #60656d;
+  font-size: 12px;
+}
+
+.monthly-sales-bar {
+  fill: var(--accent);
+}
+
+.monthly-profit-line {
+  fill: none;
+  stroke: var(--profit);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.monthly-profit-point {
+  fill: var(--profit);
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.analysis-report-view .monthly-summary-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.analysis-report-view .monthly-summary-item {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  box-shadow: none;
+}
+
+.analysis-report-view .monthly-summary-item:hover {
+  border-color: #ff9b82;
+  background: #fffaf8;
+}
+
+.analysis-report-view .monthly-summary-title {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+
+.analysis-report-view .monthly-summary-title::after {
+  float: right;
+  color: var(--muted);
+  content: "›";
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.analysis-report-view .monthly-number-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.analysis-report-view .monthly-number {
+  min-width: 0;
+  padding: 0 16px;
+  border-left: 1px solid var(--line);
+}
+
+.analysis-report-view .monthly-number:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.analysis-report-view .monthly-number span,
+.analysis-report-view .monthly-number strong {
+  display: block;
+}
+
+.analysis-report-view .monthly-number span {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.analysis-report-view .monthly-number strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(16px, 2.2vw, 22px);
+}
+
+.analysis-report-view .monthly-number .monthly-strong {
+  color: var(--profit);
+}
+
+.screen-description {
+  margin: 6px 0 18px;
+  color: var(--muted);
+}
+
+.ai-option-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 28px;
+  margin-bottom: 20px;
+}
+
+.ai-option-cards label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.ai-option-cards input {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.ai-summary-card,
+.ai-preview-card {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.ai-summary-card h2,
+.ai-preview-card h2 {
+  margin: 0 0 18px;
+  font-size: 20px;
+}
+
+.ai-summary-card > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ai-summary-card article {
+  min-width: 0;
+  padding: 4px 22px;
+  border-left: 1px solid var(--line);
+}
+
+.ai-summary-card article:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.ai-summary-card span,
+.ai-summary-card strong {
+  display: block;
+}
+
+.ai-summary-card span {
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.ai-summary-card strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(23px, 4vw, 34px);
+}
+
+.ai-preview-card textarea {
+  width: 100%;
+  min-height: 430px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  resize: vertical;
+}
+
+.ai-actions {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.ai-actions button {
+  min-height: 48px;
+}
+
+.ai-copy-status {
+  display: none;
+  margin: 14px 0 0;
+  color: var(--profit);
+  text-align: center;
+  font-weight: 700;
+}
+
+.ai-copy-status.is-error {
+  color: var(--danger);
+}
+
+.sales-list-tools {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.sales-list-tools input,
+.sales-list-tools select {
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  font-size: 16px;
+}
+
+.sales-search input {
+  padding: 0 16px;
+}
+
+.sales-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.sales-filter-row label {
+  min-width: 0;
+}
+
+.sales-filter-row label > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.data-manage-link {
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid #ff9b82;
+  border-radius: 7px;
+}
+
+.sales-list-count {
+  margin: 0 2px 10px;
+  color: var(--muted);
+}
+
+.sales-list {
+  display: grid;
+  gap: 9px;
+}
+
+.sales-list-item {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sales-list-link {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 22px;
+  gap: 14px;
+  align-items: center;
+  min-height: 106px;
+  padding: 8px 12px 8px 8px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.sales-list-link:hover {
+  background: #fffaf8;
+}
+
+.sales-list-image,
+.sales-list-view .sale-no-image {
+  width: 82px;
+  height: 88px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.sales-list-view .sale-no-image {
+  display: grid;
+  place-items: center;
+  border: 1px dashed #c7cbd1;
+  background: #f7f8f9;
+  color: #81868d;
+  font-size: 12px;
+}
+
+.sales-list-main {
+  min-width: 0;
+}
+
+.sales-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sales-list-channel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 7px;
+  border: 1px solid #81c99e;
+  border-radius: 4px;
+  color: var(--profit);
+}
+
+.sales-list-name {
+  margin: 0 0 10px;
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sales-list-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sales-list-value {
+  min-width: 0;
+}
+
+.sales-list-value span,
+.sales-list-value strong {
+  display: block;
+}
+
+.sales-list-value span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sales-list-value strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.sales-list-value .profit-plus {
+  color: var(--profit);
+}
+
+.sales-list-value .profit-minus {
+  color: var(--danger);
+}
+
+.sales-list-arrow {
+  color: var(--muted);
+  font-size: 28px;
+  text-align: right;
+}
+
+.back-link {
+  margin-bottom: 12px;
+}
+
+.sale-placeholder-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
+  gap: 24px;
+  padding: 24px;
+}
+
+.placeholder-sale-image {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  border-radius: 8px;
+  background: #f3f4f5;
+  color: var(--muted);
+}
+
+.placeholder-sale-image img {
+  width: 100%;
+  height: 100%;
+  max-height: 360px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.placeholder-sale-meta {
+  margin: 0 0 5px;
+  color: var(--muted);
+}
+
+.sale-placeholder-card h2 {
+  margin: 0 0 18px;
+}
+
+.placeholder-sale-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 20px;
+}
+
+.placeholder-sale-values div {
+  padding: 0 14px;
+  border-left: 1px solid var(--line);
+}
+
+.placeholder-sale-values div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.placeholder-sale-values dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.placeholder-sale-values dd {
+  margin: 5px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.placeholder-notice {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.placeholder-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.placeholder-actions button {
+  min-height: 46px;
+}
+
+@media (max-width: 768px) {
+  .monthly-toolbar {
+    margin-top: 14px;
+  }
+
+  .monthly-toolbar h2 {
+    font-size: 21px;
+  }
+
+  .summary-year-control select {
+    min-width: 116px;
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .monthly-chart-card {
+    padding: 14px 10px;
+  }
+
+  .monthly-chart-legend {
+    padding-right: 5px;
+  }
+
+  .monthly-chart {
+    min-width: 620px;
+  }
+
+  .analysis-report-view .monthly-summary-item {
+    padding: 14px;
+  }
+
+  .analysis-report-view .monthly-summary-title {
+    margin-bottom: 11px;
+    font-size: 18px;
+  }
+
+  .analysis-report-view .monthly-number {
+    padding: 0 8px;
+  }
+
+  .analysis-report-view .monthly-number span {
+    font-size: 11px;
+  }
+
+  .analysis-report-view .monthly-number strong {
+    font-size: 14px;
+  }
+
+  .ai-option-cards {
+    gap: 6px 18px;
+  }
+
+  .ai-summary-card,
+  .ai-preview-card {
+    padding: 15px;
+  }
+
+  .ai-summary-card article {
+    padding: 2px 10px;
+  }
+
+  .ai-summary-card span {
+    font-size: 12px;
+  }
+
+  .ai-summary-card strong {
+    font-size: 20px;
+  }
+
+  .ai-preview-card textarea {
+    min-height: 380px;
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .ai-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-filter-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .data-manage-link {
+    grid-column: 1 / -1;
+  }
+
+  .sales-list-link {
+    grid-template-columns: 64px minmax(0, 1fr) 16px;
+    gap: 9px;
+    min-height: 88px;
+    padding: 7px 8px 7px 7px;
+  }
+
+  .sales-list-image,
+  .sales-list-view .sale-no-image {
+    width: 64px;
+    height: 72px;
+  }
+
+  .sales-list-name {
+    margin-bottom: 7px;
+    font-size: 15px;
+  }
+
+  .sales-list-values {
+    gap: 5px;
+  }
+
+  .sales-list-value span {
+    font-size: 10px;
+  }
+
+  .sales-list-value strong {
+    font-size: 13px;
+  }
+
+  .sales-list-arrow {
+    font-size: 24px;
+  }
+
+  .sale-placeholder-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 15px;
+  }
+
+  .placeholder-sale-image {
+    min-height: 210px;
+  }
+
+  .placeholder-sale-values dd {
+    font-size: 16px;
+  }
+
+  .placeholder-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  /* 長い画面名でも、右側の共通月入力が隠れない大きさに整えます */
+  .app-header {
+    gap: 6px;
+  }
+
+  .app-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .global-month-control input {
+    width: 126px;
+    max-width: 38vw;
   }
 }
