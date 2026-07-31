@@ -9,7 +9,9 @@
    ========================================================= */
 :root {
   --app-accent: #ff3b0a;
-  --app-accent-dark: #e93308;
+  /* 通常サイズの文字でも白背景に対してAAを満たす、操作用の濃いオレンジです */
+  --app-accent-strong: #c72d07;
+  --app-accent-dark: #c72d07;
   --app-success: #0b963f;
   --app-danger: #c62828;
   --app-text: #11151d;
@@ -20,6 +22,7 @@
   --app-shadow: 0 1px 3px rgba(17, 21, 29, 0.05);
   /* 第3段階の分析画面でも、同じ色トークンを短い名前で共有します */
   --accent: var(--app-accent);
+  --accent-text: var(--app-accent-strong);
   --profit: var(--app-success);
   --danger: var(--app-danger);
   --ink: var(--app-text);
@@ -99,6 +102,39 @@ body {
   letter-spacing: 0;
 }
 
+/* 保存失敗や操作完了を、現在の画面の下部へ共通表示します */
+.global-status {
+  position: fixed;
+  z-index: 80;
+  right: 50%;
+  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 14px);
+  width: min(600px, calc(100% - 28px));
+  padding: 12px 16px;
+  border: 1px solid #8fd1a6;
+  border-radius: 7px;
+  color: #14532d;
+  background: #f0fdf4;
+  box-shadow: 0 8px 24px rgba(17, 21, 29, 0.18);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translateX(50%);
+}
+
+.global-status.is-warning {
+  border-color: #e2a84c;
+  color: #713f12;
+  background: #fffbeb;
+}
+
+.global-status.is-error {
+  border-color: #e08b8b;
+  color: #7f1d1d;
+  background: #fef2f2;
+}
+
 .global-month-control {
   display: flex;
   flex: 0 0 auto;
@@ -152,6 +188,7 @@ body {
   border-radius: 7px;
   color: #fff;
   background: var(--app-accent);
+  /* 白文字は太字の大きな文字にして、鮮やかな面アクセント上でもAA条件を満たします */
   font-size: 1.35rem;
   font-weight: 700;
   text-decoration: none;
@@ -167,7 +204,7 @@ body {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  color: var(--app-accent);
+  color: var(--app-accent-strong);
   background: #fff;
 }
 
@@ -285,7 +322,7 @@ body {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  color: var(--app-accent);
+  color: var(--app-accent-strong);
   font-weight: 700;
   text-decoration: none;
 }
@@ -528,7 +565,7 @@ body {
   padding: 12px;
   border: 1px dashed #aeb4bc;
   border-radius: 6px;
-  color: var(--app-accent);
+  color: var(--app-accent-strong);
   cursor: pointer;
 }
 
@@ -572,7 +609,7 @@ body {
 
 .form-actions #submitButton {
   color: #fff;
-  background: var(--app-accent);
+  background: var(--app-accent-strong);
 }
 
 .edit-status,
@@ -602,7 +639,7 @@ body {
 
 .analysis-tabs a.active {
   border-color: var(--app-accent);
-  color: var(--app-accent);
+  color: var(--app-accent-strong);
   font-weight: 700;
 }
 
@@ -734,12 +771,12 @@ body {
 }
 
 .bottom-nav a.active {
-  color: var(--app-accent);
+  color: var(--app-accent-strong);
 }
 
 .app-shell :focus-visible,
 .bottom-nav :focus-visible {
-  outline: 3px solid rgba(255, 59, 10, 0.35);
+  outline: 3px solid rgba(199, 45, 7, 0.68);
   outline-offset: 3px;
 }
 
@@ -785,7 +822,7 @@ body {
   .primary-cta {
     min-height: 60px;
     margin-bottom: 16px;
-    font-size: 1.1rem;
+    font-size: 1.2rem;
   }
 
   .home-summary {
@@ -3397,7 +3434,7 @@ body {
 
 .app-shell button {
   border-radius: 5px;
-  background: var(--app-accent);
+  background: var(--app-accent-strong);
 }
 
 .app-shell button:hover {
@@ -3482,7 +3519,7 @@ body {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 700;
   text-decoration: none;
 }
@@ -3585,6 +3622,11 @@ body {
 .monthly-grid-line {
   stroke: #dfe2e6;
   stroke-dasharray: 5 5;
+}
+
+.monthly-zero-line {
+  stroke: #6b7280;
+  stroke-width: 1.5;
 }
 
 .monthly-axis-label,
@@ -4362,7 +4404,7 @@ body {
 
 .app-shell .detail-edit-button {
   border: 1px solid var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
   background: #fff;
 }
 
@@ -4432,7 +4474,7 @@ body {
 .manage-file-button,
 .app-shell .manage-outline-button {
   border: 1px solid var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
   background: #fff;
 }
 
@@ -4479,7 +4521,7 @@ body {
 .manage-import-mode label:has(input:checked) {
   z-index: 1;
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .manage-import-mode input {

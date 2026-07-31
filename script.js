@@ -43,6 +43,7 @@ const exportMonthCsvButton = document.getElementById("exportMonthCsvButton");
 const deleteAllDataButton = document.getElementById("deleteAllDataButton");
 const csvFileInput = document.getElementById("csvFileInput");
 const dataManagementStatus = document.getElementById("dataManagementStatus");
+const globalStatus = document.getElementById("globalStatus");
 const exportJsonBackupButton = document.getElementById("exportJsonBackupButton");
 const jsonBackupInput = document.getElementById("jsonBackupInput");
 const csvImportPreview = document.getElementById("csvImportPreview");
@@ -147,8 +148,11 @@ let pendingCsvImport = null;
 // JSONも確認画面で確定するまで、検証済み内容をここに一時保存します
 let pendingJsonRestore = null;
 
-// 古いFileReaderの結果が新しい選択へ割り込まないよう、読込ごとに番号を付けます
-let csvImportRequestId = 0;
+// CSVとJSONの古い読込結果が、新しい確認画面へ割り込まないよう共通番号を付けます
+let importReadGeneration = 0;
+
+// 共通通知を自動で閉じるタイマーです。保存失敗などのエラーは閉じずに残します
+let globalStatusTimer = null;
 
 // 保存データが壊れていた場合、元の文字列を誤って上書きしないための印です
 let storageLoadBlocked = false;
@@ -284,11 +288,36 @@ function safeParseJson(jsonText, fallbackValue = null) {
   }
 }
 
-// データ管理の状態を、色だけでなく文章でも利用者へ伝えます
+// 重要な操作結果を、現在どの画面を開いていても見える共通欄へ表示します
+function showGlobalStatus(message, type = "success") {
+  window.clearTimeout(globalStatusTimer);
+  globalStatus.textContent = message;
+  globalStatus.hidden = !message;
+  globalStatus.classList.toggle("is-warning", type === "warning");
+  globalStatus.classList.toggle("is-error", type === "error");
+
+  if (message && type !== "error") {
+    globalStatusTimer = window.setTimeout(function () {
+      globalStatus.hidden = true;
+    }, type === "warning" ? 8000 : 6000);
+  }
+}
+
+// データ管理画面の状態欄と、全画面共通の通知を同じ内容にそろえます
 function showDataManagementStatus(message, type = "success") {
   dataManagementStatus.textContent = message;
   dataManagementStatus.classList.toggle("is-warning", type === "warning");
   dataManagementStatus.classList.toggle("is-error", type === "error");
+  showGlobalStatus(message, type);
+}
+
+// URLではidが文字列になるため、保存元の型に関係なく同じ基準で照合します
+function getSaleIdKey(id) {
+  return String(id ?? "");
+}
+
+function saleIdsMatch(firstId, secondId) {
+  return getSaleIdKey(firstId) === getSaleIdKey(secondId);
 }
 
 // 空欄と0を区別しながら、有限な数値だけを返します
@@ -660,9 +689,10 @@ function validateCsvRow(headerIndexes, row, rowNumber) {
     warnings.push("販売日数を販売日と仕入日から再計算しました");
   }
 
-  const importedId = parseOptionalNumber(getCsvValue(headerIndexes, row, "id"));
+  // 数字だけでなく将来の文字列idも保ち、重複判定は後段で文字列に統一します
+  const importedId = getCsvValue(headerIndexes, row, "id");
   const sale = normalizeSaleRecord({
-    id: importedId ?? Date.now() + rowNumber,
+    id: importedId || Date.now() + rowNumber,
     saleDate,
     purchaseDate,
     salesChannel,
@@ -758,11 +788,13 @@ function downloadCsv(targetSales, fileName) {
 // すべての登録データをCSVファイルとしてダウンロードします
 function exportCsv() {
   if (sales.length === 0) {
+    showDataManagementStatus("出力する売上データがありません。", "warning");
     alert("出力するデータがありません。");
     return;
   }
 
   downloadCsv(sales, `sales-data-${getTodayText()}.csv`);
+  showDataManagementStatus(`全${sales.length}件のCSVを出力しました。`);
 }
 
 // 表示中の月に含まれるデータだけをCSVファイルとしてダウンロードします
@@ -773,27 +805,58 @@ function exportMonthCsv() {
   });
 
   if (monthlySales.length === 0) {
+    showDataManagementStatus("この月のCSVへ出力できるデータがありません。", "warning");
     alert("この月のデータがありません。");
     return;
   }
 
   downloadCsv(monthlySales, `sales-data-${selectedMonth}.csv`);
+  showDataManagementStatus(`${formatMonthLabel(selectedMonth)}の${monthlySales.length}件をCSVへ出力しました。`);
 }
 
-// CSV読み込み時、idが重複しないように調整します
+function countDuplicateSaleIds(targetSales) {
+  const usedIds = new Set();
+  let duplicateCount = 0;
+
+  targetSales.forEach(function (sale) {
+    const idKey = getSaleIdKey(sale.id);
+
+    if (usedIds.has(idKey)) {
+      duplicateCount += 1;
+    } else {
+      usedIds.add(idKey);
+    }
+  });
+
+  return duplicateCount;
+}
+
+function createUniqueSaleId(usedIds, offset = 0) {
+  let nextId = Date.now() + offset + Math.floor(Math.random() * 100000);
+
+  while (usedIds.has(getSaleIdKey(nextId))) {
+    nextId += 1;
+  }
+
+  return nextId;
+}
+
+// CSVと既存データのidを文字列で比べ、詳細URLが同じになる衝突を解消します
 function ensureUniqueImportedIds(importedSales, baseSales) {
   const usedIds = new Set(baseSales.map(function (sale) {
-    return sale.id;
+    return getSaleIdKey(sale.id);
   }));
 
   return importedSales.map(function (sale, index) {
     let nextId = sale.id;
+    let nextIdKey = getSaleIdKey(nextId);
 
-    if (usedIds.has(nextId)) {
-      nextId = Date.now() + index + Math.floor(Math.random() * 100000);
+    if (!nextIdKey || usedIds.has(nextIdKey)) {
+      nextId = createUniqueSaleId(usedIds, index);
+      nextIdKey = getSaleIdKey(nextId);
     }
 
-    usedIds.add(nextId);
+    usedIds.add(nextIdKey);
     return { ...sale, id: nextId };
   });
 }
@@ -845,7 +908,7 @@ function updateCsvImportPreview() {
 }
 
 function clearPendingCsvImport() {
-  csvImportRequestId += 1;
+  importReadGeneration += 1;
   pendingCsvImport = null;
   csvFileInput.disabled = false;
   csvFileInput.value = "";
@@ -854,8 +917,12 @@ function clearPendingCsvImport() {
 
 // CSVとJSONの一時データをまとめて破棄し、管理画面へ戻れる状態にします
 function clearPendingImportReview() {
-  clearPendingCsvImport();
+  importReadGeneration += 1;
+  pendingCsvImport = null;
   pendingJsonRestore = null;
+  csvFileInput.disabled = false;
+  csvFileInput.value = "";
+  csvIssueList.innerHTML = "";
   jsonBackupInput.disabled = false;
   jsonBackupInput.value = "";
   exportJsonBackupButton.disabled = storageLoadBlocked;
@@ -864,8 +931,8 @@ function clearPendingImportReview() {
 // CSVファイルは選択時に検証するだけで、確定ボタンを押すまで保存しません
 function stageCsvImport(file) {
   const reader = new FileReader();
-  const requestId = csvImportRequestId + 1;
-  csvImportRequestId = requestId;
+  const requestId = importReadGeneration + 1;
+  importReadGeneration = requestId;
   pendingCsvImport = null;
   pendingJsonRestore = null;
   finalizeJsonRestoreControls();
@@ -873,14 +940,14 @@ function stageCsvImport(file) {
   showDataManagementStatus("CSVを検証しています。", "warning");
 
   function finalizeCsvStaging() {
-    if (requestId === csvImportRequestId) {
+    if (requestId === importReadGeneration) {
       csvFileInput.disabled = false;
     }
   }
 
   reader.onload = function () {
     try {
-      if (requestId !== csvImportRequestId) {
+      if (requestId !== importReadGeneration) {
         return;
       }
 
@@ -904,7 +971,7 @@ function stageCsvImport(file) {
   };
 
   reader.onerror = function () {
-    if (requestId === csvImportRequestId) {
+    if (requestId === importReadGeneration) {
       pendingCsvImport = null;
       showDataManagementStatus("CSVファイルを読み込めませんでした。ファイル形式を確認してください。", "error");
     }
@@ -915,8 +982,10 @@ function stageCsvImport(file) {
   try {
     reader.readAsText(file, "utf-8");
   } catch (error) {
-    pendingCsvImport = null;
-    showDataManagementStatus("CSVファイルの読み込みを開始できませんでした。", "error");
+    if (requestId === importReadGeneration) {
+      pendingCsvImport = null;
+      showDataManagementStatus("CSVファイルの読み込みを開始できませんでした。", "error");
+    }
     finalizeCsvStaging();
   }
 }
@@ -1783,11 +1852,24 @@ function loadSales() {
     return;
   }
 
-  sales = parsed.value.map(function (sale, index) {
+  const normalizedSales = parsed.value.map(function (sale, index) {
     return normalizeSaleRecord(sale, Date.now() + index);
   });
+  const duplicateIdCount = countDuplicateSaleIds(normalizedSales);
+  sales = ensureUniqueImportedIds(normalizedSales, []);
   storageLoadBlocked = false;
   exportJsonBackupButton.disabled = false;
+
+  if (duplicateIdCount > 0) {
+    if (saveSales(sales)) {
+      showDataManagementStatus(
+        `${sales.length}件を読み込み、詳細URLが重なるID ${duplicateIdCount}件を安全なIDへ修正しました。`,
+        "warning"
+      );
+    }
+    return;
+  }
+
   showDataManagementStatus(`${sales.length}件の保存データを安全に読み込みました。`);
 }
 
@@ -1936,11 +2018,21 @@ function validateJsonBackup(backup) {
     })) {
       errors.push("売上データに不正な形式の項目があります。");
     } else {
+      const duplicateIds = new Set();
+      const seenIds = new Set();
+
       backup.sales.forEach(function (sale, index) {
         const reason = validateBackupSale(sale, index);
+        const idKey = getSaleIdKey(sale.id);
 
         if (reason) {
           invalidSaleReasons.push(reason);
+        }
+
+        if (idKey && seenIds.has(idKey)) {
+          duplicateIds.add(idKey);
+        } else if (idKey) {
+          seenIds.add(idKey);
         }
       });
 
@@ -1948,6 +2040,10 @@ function validateJsonBackup(backup) {
         errors.push(
           `売上データ${invalidSaleReasons.length}件が不正です。先頭の理由: ${invalidSaleReasons[0]}`
         );
+      }
+
+      if (duplicateIds.size > 0) {
+        errors.push(`売上データに重複IDが${duplicateIds.size}件あります。`);
       }
     }
 
@@ -2016,12 +2112,22 @@ function restoreJsonBackup(file) {
   }
 
   const reader = new FileReader();
+  const requestId = importReadGeneration + 1;
+  importReadGeneration = requestId;
+  pendingCsvImport = null;
+  pendingJsonRestore = null;
+  csvFileInput.disabled = false;
+  csvFileInput.value = "";
   exportJsonBackupButton.disabled = true;
   jsonBackupInput.disabled = true;
   showDataManagementStatus("JSONバックアップを検証しています。", "warning");
 
   reader.onload = function () {
     try {
+      if (requestId !== importReadGeneration) {
+        return;
+      }
+
       const parsed = safeParseJson(String(reader.result || ""), null);
       const validation = parsed.ok
         ? validateJsonBackup(parsed.value)
@@ -2033,10 +2139,9 @@ function restoreJsonBackup(file) {
       }
 
       const backup = parsed.value;
-      const normalizedSales = backup.sales.map(function (sale, index) {
+      const normalizedSales = ensureUniqueImportedIds(backup.sales.map(function (sale, index) {
         return normalizeSaleRecord(sale, Date.now() + index);
-      });
-      clearPendingCsvImport();
+      }), []);
       pendingJsonRestore = {
         backup,
         normalizedSales,
@@ -2046,20 +2151,26 @@ function restoreJsonBackup(file) {
       showDataManagementStatus(`${normalizedSales.length}件のJSONバックアップを検証しました。内容を確認してください。`);
       window.location.hash = "data/import-review";
     } finally {
-      finalizeJsonRestoreControls();
+      if (requestId === importReadGeneration) {
+        finalizeJsonRestoreControls();
+      }
     }
   };
 
   reader.onerror = function () {
-    showDataManagementStatus("JSONバックアップを読み込めませんでした。", "error");
-    finalizeJsonRestoreControls();
+    if (requestId === importReadGeneration) {
+      showDataManagementStatus("JSONバックアップを読み込めませんでした。", "error");
+      finalizeJsonRestoreControls();
+    }
   };
 
   try {
     reader.readAsText(file, "utf-8");
   } catch (error) {
-    showDataManagementStatus("JSONバックアップの読み込みを開始できませんでした。", "error");
-    finalizeJsonRestoreControls();
+    if (requestId === importReadGeneration) {
+      showDataManagementStatus("JSONバックアップの読み込みを開始できませんでした。", "error");
+      finalizeJsonRestoreControls();
+    }
   }
 }
 
@@ -2256,7 +2367,7 @@ function resetForm() {
 // 編集ボタンが押された商品データをフォームへ戻します
 function startEditSale(id) {
   const sale = sales.find(function (targetSale) {
-    return targetSale.id === id;
+    return saleIdsMatch(targetSale.id, id);
   });
 
   if (!sale) {
@@ -2402,7 +2513,7 @@ function getSaleIdFromRoute(route) {
 function renderSalePlaceholderRoute(route) {
   const saleIdText = getSaleIdFromRoute(route);
   const sale = sales.find(function (targetSale) {
-    return String(targetSale.id) === saleIdText;
+    return saleIdsMatch(targetSale.id, saleIdText);
   });
 
   placeholderSaleImage.innerHTML = "";
@@ -2671,6 +2782,9 @@ function renderDailySales(filteredSales) {
   dailySummarySales.textContent = formatYen(summary.salesTotal);
   dailySummaryProfit.textContent = formatYen(summary.profitTotal);
   dailySummaryCount.textContent = `${summary.count}件`;
+  dailySummarySales.setAttribute("aria-label", `${formatMonthLabel(monthFilterInput.value)}の売上合計 ${formatYen(summary.salesTotal)}`);
+  dailySummaryProfit.setAttribute("aria-label", `${formatMonthLabel(monthFilterInput.value)}の利益合計 ${formatYen(summary.profitTotal)}`);
+  dailySummaryCount.setAttribute("aria-label", `${formatMonthLabel(monthFilterInput.value)}の登録件数 ${summary.count}件`);
   dailySalesList.innerHTML = "";
 
   if (dailyGroups.length === 0) {
@@ -2690,7 +2804,8 @@ function renderDailySales(filteredSales) {
     dateArea.className = "daily-date-area";
 
     const title = document.createElement("h3");
-    title.textContent = formatDayLabel(dailyGroup.dateText);
+    const dayLabel = formatDayLabel(dailyGroup.dateText);
+    title.textContent = dayLabel;
 
     const dateValue = parseDateText(dailyGroup.dateText);
     const weekday = document.createElement("span");
@@ -2702,13 +2817,16 @@ function renderDailySales(filteredSales) {
 
     const salesValue = document.createElement("strong");
     salesValue.textContent = formatYen(metrics.salesTotal);
+    salesValue.setAttribute("aria-label", `${dayLabel}の売上合計 ${formatYen(metrics.salesTotal)}`);
 
     const profitValue = document.createElement("strong");
     profitValue.className = metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus";
     profitValue.textContent = formatYen(metrics.profitTotal);
+    profitValue.setAttribute("aria-label", `${dayLabel}の利益合計 ${formatYen(metrics.profitTotal)}`);
 
     const countValue = document.createElement("strong");
     countValue.textContent = `${metrics.count}件`;
+    countValue.setAttribute("aria-label", `${dayLabel}の登録件数 ${metrics.count}件`);
 
     // 日別売上は日々確認しやすいよう、指定された3項目だけを表示します
     card.append(dateArea, salesValue, profitValue, countValue);
@@ -2910,19 +3028,28 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
       profit: summary.profitTotal
     };
   });
-  const maximumValue = Math.max(1, ...values.flatMap(function (value) {
+  const chartValues = values.flatMap(function (value) {
     return [value.sales, value.profit];
-  }));
-  const plotLeft = 48;
+  });
+  // 0円を必ず範囲に含め、赤字の利益もSVG内へ収まる尺度にします
+  const minimumValue = Math.min(0, ...chartValues);
+  const maximumValue = Math.max(0, ...chartValues);
+  const valueRange = Math.max(maximumValue - minimumValue, 1);
+  const plotLeft = 64;
   const plotRight = 704;
   const plotTop = 30;
   const plotBottom = 252;
   const plotHeight = plotBottom - plotTop;
   const step = (plotRight - plotLeft) / 12;
+  const getChartY = function (value) {
+    const rawY = plotTop + (maximumValue - value) / valueRange * plotHeight;
+    return Math.min(plotBottom, Math.max(plotTop, rawY));
+  };
+  const zeroY = getChartY(0);
 
   // 補助線と金額目盛りを先に描き、棒と折れ線が読み取りやすいようにします
   [0, 0.25, 0.5, 0.75, 1].forEach(function (ratio) {
-    const y = plotBottom - plotHeight * ratio;
+    const y = plotTop + plotHeight * ratio;
     const line = createSvgElement("line", {
       x1: plotLeft,
       y1: y,
@@ -2936,23 +3063,35 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
       "text-anchor": "end",
       class: "monthly-axis-label"
     });
-    const labelValue = maximumValue * ratio;
+    const labelValue = maximumValue - valueRange * ratio;
     label.textContent = labelValue === 0
       ? "0"
-      : labelValue >= 100000
+      : Math.abs(labelValue) >= 100000
         ? `${Math.round(labelValue / 10000)}万`
         : Math.round(labelValue).toLocaleString();
     monthlyChart.append(line, label);
   });
 
+  if (minimumValue < 0) {
+    const zeroLine = createSvgElement("line", {
+      x1: plotLeft,
+      y1: zeroY,
+      x2: plotRight,
+      y2: zeroY,
+      class: "monthly-zero-line"
+    });
+    monthlyChart.appendChild(zeroLine);
+  }
+
   const profitPoints = [];
 
   values.forEach(function (value, index) {
     const centerX = plotLeft + step * index + step / 2;
-    const salesHeight = value.sales / maximumValue * plotHeight;
+    const salesY = getChartY(value.sales);
+    const salesHeight = Math.abs(zeroY - salesY);
     const salesBar = createSvgElement("rect", {
       x: centerX - Math.min(16, step * 0.3),
-      y: plotBottom - salesHeight,
+      y: Math.min(zeroY, salesY),
       width: Math.min(32, step * 0.6),
       height: salesHeight,
       rx: 3,
@@ -2962,7 +3101,7 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
     barTitle.textContent = `${value.month}月 売上 ${formatYen(value.sales)}`;
     salesBar.appendChild(barTitle);
 
-    const profitY = plotBottom - value.profit / maximumValue * plotHeight;
+    const profitY = getChartY(value.profit);
     profitPoints.push(`${centerX},${profitY}`);
 
     const monthLabel = createSvgElement("text", {
@@ -2983,7 +3122,7 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
 
   values.forEach(function (value, index) {
     const centerX = plotLeft + step * index + step / 2;
-    const profitY = plotBottom - value.profit / maximumValue * plotHeight;
+    const profitY = getChartY(value.profit);
     const point = createSvgElement("circle", {
       cx: centerX,
       cy: profitY,
@@ -3111,14 +3250,14 @@ function deleteSale(id) {
   }
 
   const nextSales = sales.filter(function (sale) {
-    return sale.id !== id;
+    return !saleIdsMatch(sale.id, id);
   });
 
   if (!commitSales(nextSales, "商品を削除しました。")) {
     return;
   }
 
-  if (editingSaleId === id) {
+  if (editingSaleId !== null && saleIdsMatch(editingSaleId, id)) {
     resetForm();
   }
 
@@ -3226,7 +3365,7 @@ placeholderDeleteButton.addEventListener("click", function () {
 
   // キャンセル時は現在の商品が残るため、詳細画面もそのまま維持します
   if (!sales.some(function (sale) {
-    return sale.id === deletingId;
+    return saleIdsMatch(sale.id, deletingId);
   })) {
     window.location.hash = "data/list";
   }
@@ -3399,14 +3538,16 @@ form.addEventListener("submit", async function (event) {
   const existingSale = editingSaleId === null
     ? null
     : sales.find(function (targetSale) {
-      return targetSale.id === editingSaleId;
+      return saleIdsMatch(targetSale.id, editingSaleId);
     });
 
   // 登録または更新する1件分のデータを作ります
   const sale = {
     // 編集時は既存データを先にコピーし、将来追加される未知の項目も消さないようにします
     ...(existingSale || {}),
-    id: editingSaleId ?? Date.now(),
+    id: editingSaleId ?? createUniqueSaleId(new Set(sales.map(function (targetSale) {
+      return getSaleIdKey(targetSale.id);
+    }))),
     saleDate,
     purchaseDate,
     salesChannel,
@@ -3428,7 +3569,7 @@ form.addEventListener("submit", async function (event) {
   if (editingSaleId !== null) {
     // 編集中のときは、新規追加せず既存データを上書きします
     nextSales = sales.map(function (targetSale) {
-      return targetSale.id === editingSaleId ? sale : targetSale;
+      return saleIdsMatch(targetSale.id, editingSaleId) ? sale : targetSale;
     });
   } else {
     // 新規登録のときは、一覧の先頭に追加します
