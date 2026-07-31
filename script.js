@@ -2774,6 +2774,33 @@ function createSvgElement(elementName, attributes = {}) {
 
 function renderMonthlyChart(selectedYear, monthlyGroups) {
   monthlyChart.innerHTML = "";
+  const title = createSvgElement("title");
+  title.textContent = `${selectedYear}年の月別売上と利益`;
+  monthlyChart.appendChild(title);
+
+  // データがない年度では、不自然な目盛りを描かず空状態だけを表示します
+  if (monthlyGroups.length === 0) {
+    const emptyTitle = createSvgElement("text", {
+      x: 360,
+      y: 138,
+      "text-anchor": "middle",
+      class: "monthly-chart-empty-title"
+    });
+    emptyTitle.textContent = "この年度の売上データはありません";
+
+    const emptyDescription = createSvgElement("text", {
+      x: 360,
+      y: 172,
+      "text-anchor": "middle",
+      class: "monthly-chart-empty-description"
+    });
+    emptyDescription.textContent = "売上を登録すると、月別の売上と利益を表示します";
+
+    monthlyChart.append(emptyTitle, emptyDescription);
+    monthlyChart.setAttribute("aria-label", `${selectedYear}年の売上データはありません`);
+    return;
+  }
+
   const groupMap = new Map(monthlyGroups.map(function (group) {
     return [Number(group.month.slice(5, 7)), group.summary];
   }));
@@ -2794,10 +2821,6 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
   const plotBottom = 252;
   const plotHeight = plotBottom - plotTop;
   const step = (plotRight - plotLeft) / 12;
-
-  const title = createSvgElement("title");
-  title.textContent = `${selectedYear}年の月別売上と利益`;
-  monthlyChart.appendChild(title);
 
   // 補助線と金額目盛りを先に描き、棒と折れ線が読み取りやすいようにします
   [0, 0.25, 0.5, 0.75, 1].forEach(function (ratio) {

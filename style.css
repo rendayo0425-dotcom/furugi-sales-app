@@ -3611,6 +3611,17 @@ body {
   stroke-width: 2;
 }
 
+.monthly-chart-empty-title {
+  fill: var(--ink);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.monthly-chart-empty-description {
+  fill: var(--muted);
+  font-size: 14px;
+}
+
 .analysis-report-view .monthly-summary-list {
   display: grid;
   gap: 12px;
