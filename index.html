@@ -176,14 +176,66 @@
       </section>
     </section>
 
-    <!-- 第2段階以降も既存機能を使えるよう、分析セクションを暫定画面に残します -->
-    <section id="legacyAnalysisView" class="app-view legacy-view" data-routes="analysis/weekly analysis/daily analysis/channel analysis/monthly" hidden>
+    <!-- 選択中の月を4つの期間に分けて比較する週間レポートです -->
+    <section id="weeklyView" class="app-view analysis-report-view" data-route="analysis/weekly" hidden>
       <nav class="analysis-tabs" aria-label="分析画面">
         <a href="#analysis/overview">概要</a><a href="#analysis/weekly">週間</a><a href="#analysis/daily">日別</a><a href="#analysis/channel">販路別</a><a href="#analysis/monthly">月別</a>
       </nav>
-      <section id="weeklySection" class="surface legacy-section"><h2>週間レポート</h2><div id="weeklyReportList" class="weekly-report-list"></div></section>
-      <section id="dailySection" class="surface legacy-section"><h2>日別売上</h2><div id="dailySalesList" class="daily-sales-list"></div></section>
-      <section id="channelSection" class="surface legacy-section"><h2>販路別集計</h2><div id="channelSummaryList" class="channel-summary-list"></div></section>
+      <section class="surface report-summary-card">
+        <h2 id="weeklySummaryLabel">選択月の週次サマリー</h2>
+        <div class="report-summary-grid">
+          <div><span>売上合計</span><strong id="weeklySummarySales">0円</strong></div>
+          <div><span>利益合計</span><strong id="weeklySummaryProfit">0円</strong></div>
+          <div><span>利益率</span><strong id="weeklySummaryRate">0.0%</strong></div>
+          <div><span>登録件数</span><strong id="weeklySummaryCount">0件</strong></div>
+        </div>
+      </section>
+      <div id="weeklyReportList" class="weekly-report-list"></div>
+    </section>
+
+    <!-- 売上がある日だけを、売上・利益・件数の3項目に絞って表示します -->
+    <section id="dailyView" class="app-view analysis-report-view" data-route="analysis/daily" hidden>
+      <nav class="analysis-tabs" aria-label="分析画面">
+        <a href="#analysis/overview">概要</a><a href="#analysis/weekly">週間</a><a href="#analysis/daily">日別</a><a href="#analysis/channel">販路別</a><a href="#analysis/monthly">月別</a>
+      </nav>
+      <section class="surface daily-summary-card" aria-label="選択中の月の日別売上合計">
+        <div><span>売上</span><strong id="dailySummarySales">0円</strong></div>
+        <div><span>利益</span><strong id="dailySummaryProfit">0円</strong></div>
+        <div><span>件数</span><strong id="dailySummaryCount">0件</strong></div>
+      </section>
+      <section class="surface daily-table-card">
+        <div class="daily-table-heading" aria-hidden="true"><span>日付</span><span>売上</span><span>利益</span><span>件数</span></div>
+        <div id="dailySalesList" class="daily-sales-list"></div>
+        <p class="daily-table-note">売上がある日だけを表示しています</p>
+      </section>
+    </section>
+
+    <!-- 販路ごとの構成比と収益性を比較する画面です -->
+    <section id="channelView" class="app-view analysis-report-view" data-route="analysis/channel" hidden>
+      <nav class="analysis-tabs" aria-label="分析画面">
+        <a href="#analysis/overview">概要</a><a href="#analysis/weekly">週間</a><a href="#analysis/daily">日別</a><a href="#analysis/channel">販路別</a><a href="#analysis/monthly">月別</a>
+      </nav>
+      <section class="surface channel-composition-card">
+        <h2>売上構成比</h2>
+        <div class="channel-composition-layout">
+          <div id="channelCompositionChart" class="channel-donut" role="img" aria-label="販路別売上構成比">
+            <div><span>売上合計</span><strong id="channelCompositionTotal">0円</strong></div>
+          </div>
+          <div id="channelCompositionLegend" class="channel-legend"></div>
+        </div>
+      </section>
+      <div id="channelSummaryList" class="channel-summary-list"></div>
+      <section class="surface channel-rate-card">
+        <h2>加重利益率 比較</h2>
+        <div id="channelRateComparison" class="channel-rate-comparison"></div>
+      </section>
+    </section>
+
+    <!-- 月別画面は第3段階まで既存表示を維持します -->
+    <section id="legacyMonthlyView" class="app-view legacy-view" data-route="analysis/monthly" hidden>
+      <nav class="analysis-tabs" aria-label="分析画面">
+        <a href="#analysis/overview">概要</a><a href="#analysis/weekly">週間</a><a href="#analysis/daily">日別</a><a href="#analysis/channel">販路別</a><a href="#analysis/monthly">月別</a>
+      </nav>
       <section id="monthlySection" class="surface legacy-section">
         <h2>月別サマリー</h2>
         <label class="summary-year-control" for="summaryYearSelect">年度<select id="summaryYearSelect"></select></label>

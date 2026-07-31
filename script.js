@@ -79,6 +79,18 @@ const homeRecentSales = document.getElementById("homeRecentSales");
 const homeSalesChart = document.getElementById("homeSalesChart");
 const homeTrendPeriod = document.getElementById("homeTrendPeriod");
 const homeTrendTotal = document.getElementById("homeTrendTotal");
+const weeklySummaryLabel = document.getElementById("weeklySummaryLabel");
+const weeklySummarySales = document.getElementById("weeklySummarySales");
+const weeklySummaryProfit = document.getElementById("weeklySummaryProfit");
+const weeklySummaryRate = document.getElementById("weeklySummaryRate");
+const weeklySummaryCount = document.getElementById("weeklySummaryCount");
+const dailySummarySales = document.getElementById("dailySummarySales");
+const dailySummaryProfit = document.getElementById("dailySummaryProfit");
+const dailySummaryCount = document.getElementById("dailySummaryCount");
+const channelCompositionChart = document.getElementById("channelCompositionChart");
+const channelCompositionTotal = document.getElementById("channelCompositionTotal");
+const channelCompositionLegend = document.getElementById("channelCompositionLegend");
+const channelRateComparison = document.getElementById("channelRateComparison");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -1295,8 +1307,16 @@ function getRouteTitle(route) {
     return editingSaleId === null ? "売上を登録" : "売上を編集";
   }
 
-  if (route.startsWith("analysis/")) {
-    return "分析";
+  const analysisTitles = {
+    "analysis/overview": "分析",
+    "analysis/weekly": "週間レポート",
+    "analysis/daily": "日別売上",
+    "analysis/channel": "販路別分析",
+    "analysis/monthly": "月別サマリー"
+  };
+
+  if (analysisTitles[route]) {
+    return analysisTitles[route];
   }
 
   return "売上データ";
@@ -1338,9 +1358,6 @@ function showRoute(options = {}) {
 
   // 暫定分析画面は同じDOMなので、選択した項目まで移動します
   const legacyTargets = {
-    "analysis/weekly": "weeklySection",
-    "analysis/daily": "dailySection",
-    "analysis/channel": "channelSection",
     "analysis/monthly": "monthlySection"
   };
   const targetId = legacyTargets[route];
@@ -2438,7 +2455,13 @@ function renderKpiSummary(filteredSales) {
 function renderWeeklyReport(filteredSales) {
   const selectedMonth = monthFilterInput.value;
   const weeklyRanges = getWeeklyRanges(selectedMonth);
+  const monthlyMetrics = calculateWeeklyMetrics(filteredSales);
 
+  weeklySummaryLabel.textContent = `${formatMonthLabel(selectedMonth)}の週次サマリー（第1週〜第4週）`;
+  weeklySummarySales.textContent = formatYen(monthlyMetrics.salesTotal);
+  weeklySummaryProfit.textContent = formatYen(monthlyMetrics.profitTotal);
+  weeklySummaryRate.textContent = formatPercent(monthlyMetrics.averageProfitRate);
+  weeklySummaryCount.textContent = `${monthlyMetrics.count}件`;
   weeklyReportList.innerHTML = "";
 
   weeklyRanges.forEach(function (range) {
@@ -2453,23 +2476,23 @@ function renderWeeklyReport(filteredSales) {
     const header = document.createElement("div");
     header.className = "weekly-report-header";
 
+    const period = document.createElement("div");
+    period.className = "weekly-period";
+
     const title = document.createElement("h3");
-    title.className = "weekly-report-title";
-    title.textContent = range.label;
+    title.textContent = `第${range.weekNumber}週`;
 
-    const count = document.createElement("strong");
-    count.className = "weekly-report-count";
-    count.textContent = `${metrics.count}件`;
-
-    header.append(title, count);
+    const dateRange = document.createElement("span");
+    dateRange.textContent = `${Number(selectedMonth.slice(5, 7))}/${range.startDay}〜${Number(selectedMonth.slice(5, 7))}/${range.endDay}`;
+    period.append(title, dateRange);
 
     const mainGrid = document.createElement("div");
     mainGrid.className = "weekly-main-grid";
 
     const mainItems = [
-      ["売上合計", formatYen(metrics.salesTotal)],
-      ["利益合計", formatYen(metrics.profitTotal), metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus"],
-      ["登録件数", `${metrics.count}件`]
+      ["売上", formatYen(metrics.salesTotal)],
+      ["利益", formatYen(metrics.profitTotal), metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus"],
+      ["件数", `${metrics.count}件`]
     ];
 
     mainItems.forEach(function (item) {
@@ -2490,17 +2513,15 @@ function renderWeeklyReport(filteredSales) {
       mainGrid.appendChild(box);
     });
 
+    header.append(period, mainGrid);
+
     const detailGrid = document.createElement("div");
     detailGrid.className = "weekly-detail-grid";
 
     const detailItems = [
-      ["期間", `${range.startDay}日〜${range.endDay}日`],
-      ["原価合計", formatYen(metrics.costTotal)],
-      ["送料合計", formatYen(metrics.shippingTotal)],
-      ["手数料合計", formatYen(metrics.feeTotal)],
       ["平均売価", formatYen(metrics.averageSalePrice)],
       ["平均利益", formatYen(metrics.averageProfit)],
-      ["平均利益率", formatPercent(metrics.averageProfitRate)],
+      ["利益率", formatPercent(metrics.averageProfitRate), "profit-plus"],
       ["原価率", formatPercent(metrics.costRate)],
       ["送料率", formatPercent(metrics.shippingRate)],
       ["手数料率", formatPercent(metrics.feeRate)],
@@ -2517,6 +2538,10 @@ function renderWeeklyReport(filteredSales) {
       const value = document.createElement("strong");
       value.textContent = item[1];
 
+      if (item[2]) {
+        value.className = item[2];
+      }
+
       box.append(label, value);
       detailGrid.appendChild(box);
     });
@@ -2529,7 +2554,17 @@ function renderWeeklyReport(filteredSales) {
 // 選択中の月の売上を、販売日ごとにコンパクト表示します
 function renderDailySales(filteredSales) {
   const dailyGroups = getDailySalesGroups(filteredSales);
+  const summary = calculateSummary(filteredSales);
+  const maxDailySales = Math.max(
+    ...dailyGroups.map(function (dailyGroup) {
+      return calculateSummary(dailyGroup.sales).salesTotal;
+    }),
+    1
+  );
 
+  dailySummarySales.textContent = formatYen(summary.salesTotal);
+  dailySummaryProfit.textContent = formatYen(summary.profitTotal);
+  dailySummaryCount.textContent = `${summary.count}件`;
   dailySalesList.innerHTML = "";
 
   if (dailyGroups.length === 0) {
@@ -2545,98 +2580,175 @@ function renderDailySales(filteredSales) {
     const card = document.createElement("article");
     card.className = "daily-sales-item";
 
-    const header = document.createElement("div");
-    header.className = "daily-sales-header";
+    const dateArea = document.createElement("div");
+    dateArea.className = "daily-date-area";
 
     const title = document.createElement("h3");
-    title.className = "daily-sales-title";
     title.textContent = formatDayLabel(dailyGroup.dateText);
 
-    const count = document.createElement("strong");
-    count.className = "daily-sales-count";
-    count.textContent = `${metrics.count}件`;
+    const dateValue = parseDateText(dailyGroup.dateText);
+    const weekday = document.createElement("span");
+    weekday.textContent = dateValue ? `（${weekdays[dateValue.getDay()].shortName}）` : "";
+    const bar = document.createElement("div");
+    bar.className = "daily-volume-bar";
+    bar.style.width = `${Math.max(metrics.salesTotal / maxDailySales * 100, 3)}%`;
+    dateArea.append(title, weekday, bar);
 
-    header.append(title, count);
+    const salesValue = document.createElement("strong");
+    salesValue.textContent = formatYen(metrics.salesTotal);
 
-    const mainGrid = document.createElement("div");
-    mainGrid.className = "daily-main-grid";
+    const profitValue = document.createElement("strong");
+    profitValue.className = metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus";
+    profitValue.textContent = formatYen(metrics.profitTotal);
 
-    // 日別売上は毎日見る場所なので、必要な3項目だけに絞ります
-    const mainItems = [
-      ["売上合計", formatYen(metrics.salesTotal)],
-      ["利益合計", formatYen(metrics.profitTotal), metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus"]
-    ];
+    const countValue = document.createElement("strong");
+    countValue.textContent = `${metrics.count}件`;
 
-    mainItems.forEach(function (item) {
-      const box = document.createElement("div");
-      box.className = "daily-main-number";
-
-      const label = document.createElement("span");
-      label.textContent = item[0];
-
-      const value = document.createElement("strong");
-      value.textContent = item[1];
-
-      if (item[2]) {
-        value.className = item[2];
-      }
-
-      box.append(label, value);
-      mainGrid.appendChild(box);
-    });
-
-    card.append(header, mainGrid);
+    // 日別売上は日々確認しやすいよう、指定された3項目だけを表示します
+    card.append(dateArea, salesValue, profitValue, countValue);
     dailySalesList.appendChild(card);
   });
 }
 
 // 販路別集計を画面に表示します
 function renderChannelSummary(filteredSales) {
-  channelSummaryList.innerHTML = "";
-
-  salesChannels.forEach(function (channelName) {
+  const channelColors = ["#ff3b0a", "#f6a800", "#2587e8", "#07934a"];
+  const overallSummary = calculateSummary(filteredSales);
+  const channelResults = salesChannels.map(function (channelName, index) {
     const channelSales = filteredSales.filter(function (sale) {
       return sale.salesChannel === channelName;
     });
 
-    const summary = calculateSummary(channelSales);
+    return {
+      channelName,
+      color: channelColors[index],
+      summary: calculateSummary(channelSales)
+    };
+  });
+
+  channelSummaryList.innerHTML = "";
+  channelCompositionLegend.innerHTML = "";
+  channelRateComparison.innerHTML = "";
+  channelCompositionTotal.textContent = formatYen(overallSummary.salesTotal);
+
+  let accumulatedPercent = 0;
+  const gradientParts = channelResults.map(function (result) {
+    const share = overallSummary.salesTotal === 0
+      ? 0
+      : result.summary.salesTotal / overallSummary.salesTotal * 100;
+    const start = accumulatedPercent;
+    accumulatedPercent += share;
+    return `${result.color} ${start}% ${accumulatedPercent}%`;
+  });
+  channelCompositionChart.style.background = overallSummary.salesTotal === 0
+    ? "#e8eaed"
+    : `conic-gradient(${gradientParts.join(", ")})`;
+  channelCompositionChart.setAttribute(
+    "aria-label",
+    overallSummary.salesTotal === 0
+      ? "選択中の月は販路別売上がありません"
+      : channelResults.map(function (result) {
+        const share = result.summary.salesTotal / overallSummary.salesTotal * 100;
+        return `${result.channelName} ${share.toFixed(1)}%`;
+      }).join("、")
+  );
+
+  channelResults.forEach(function (result) {
+    const share = overallSummary.salesTotal === 0
+      ? 0
+      : result.summary.salesTotal / overallSummary.salesTotal * 100;
+    const legendItem = document.createElement("div");
+    legendItem.className = "channel-legend-item";
+
+    const swatch = document.createElement("span");
+    swatch.className = "channel-swatch";
+    swatch.style.backgroundColor = result.color;
+
+    const legendText = document.createElement("div");
+    const legendName = document.createElement("strong");
+    legendName.textContent = result.channelName;
+    const legendValue = document.createElement("span");
+    legendValue.textContent = `${formatYen(result.summary.salesTotal)}（${share.toFixed(1)}%）`;
+    legendText.append(legendName, legendValue);
+    legendItem.append(swatch, legendText);
+    channelCompositionLegend.appendChild(legendItem);
+
     const item = document.createElement("article");
     item.className = "channel-summary-item";
+    item.style.setProperty("--channel-color", result.color);
 
     const title = document.createElement("h3");
-    title.className = "channel-summary-title";
-    title.textContent = channelName;
+    title.textContent = result.channelName;
 
-    const numberGrid = document.createElement("div");
+    const marker = document.createElement("span");
+    marker.className = "channel-card-marker";
+    marker.style.backgroundColor = result.color;
+    title.prepend(marker);
+
+    const numberGrid = document.createElement("dl");
     numberGrid.className = "channel-number-grid";
 
     const numberItems = [
-      ["売上合計", formatYen(summary.salesTotal)],
-      ["原価合計", formatYen(summary.costTotal)],
-      ["送料合計", formatYen(summary.shippingTotal)],
-      ["手数料合計", formatYen(summary.feeTotal)],
-      ["利益合計", formatYen(summary.profitTotal)],
-      ["平均利益率", formatPercent(summary.totalProfitRate)],
-      ["登録件数", `${summary.count}件`]
+      ["売上", formatYen(result.summary.salesTotal)],
+      ["原価", formatYen(result.summary.costTotal)],
+      ["送料", formatYen(result.summary.shippingTotal)],
+      ["手数料", formatYen(result.summary.feeTotal)],
+      ["利益", formatYen(result.summary.profitTotal), "channel-profit-row"],
+      ["加重利益率", formatPercent(result.summary.totalProfitRate), "channel-profit-row"],
+      ["件数", `${result.summary.count}件`]
     ];
 
     numberItems.forEach(function (numberItem) {
-      const box = document.createElement("div");
-      box.className = "channel-number";
+      const row = document.createElement("div");
 
-      const label = document.createElement("span");
+      if (numberItem[2]) {
+        row.className = numberItem[2];
+      }
+
+      const label = document.createElement("dt");
       label.textContent = numberItem[0];
 
-      const value = document.createElement("strong");
+      const value = document.createElement("dd");
       value.textContent = numberItem[1];
-
-      box.append(label, value);
-      numberGrid.appendChild(box);
+      row.append(label, value);
+      numberGrid.appendChild(row);
     });
 
     item.append(title, numberGrid);
     channelSummaryList.appendChild(item);
+
+    const comparisonRow = document.createElement("div");
+    comparisonRow.className = "channel-rate-row";
+
+    const comparisonName = document.createElement("span");
+    comparisonName.textContent = result.channelName;
+
+    const comparisonTrack = document.createElement("div");
+    comparisonTrack.className = "channel-rate-track";
+    const comparisonBar = document.createElement("div");
+    comparisonBar.style.width = `${Math.max(0, Math.min(result.summary.totalProfitRate, 100))}%`;
+    comparisonBar.style.backgroundColor = result.color;
+    comparisonTrack.appendChild(comparisonBar);
+
+    const comparisonValue = document.createElement("strong");
+    comparisonValue.textContent = formatPercent(result.summary.totalProfitRate);
+    comparisonRow.append(comparisonName, comparisonTrack, comparisonValue);
+    channelRateComparison.appendChild(comparisonRow);
   });
+
+  const overallRow = document.createElement("div");
+  overallRow.className = "channel-rate-row overall-rate-row";
+  const overallName = document.createElement("span");
+  overallName.textContent = "全体";
+  const overallTrack = document.createElement("div");
+  overallTrack.className = "channel-rate-track";
+  const overallBar = document.createElement("div");
+  overallBar.style.width = `${Math.max(0, Math.min(overallSummary.totalProfitRate, 100))}%`;
+  overallTrack.appendChild(overallBar);
+  const overallValue = document.createElement("strong");
+  overallValue.textContent = formatPercent(overallSummary.totalProfitRate);
+  overallRow.append(overallName, overallTrack, overallValue);
+  channelRateComparison.appendChild(overallRow);
 }
 
 // 月別サマリーを画面に表示します
