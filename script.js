@@ -42,6 +42,19 @@ const exportCsvButton = document.getElementById("exportCsvButton");
 const exportMonthCsvButton = document.getElementById("exportMonthCsvButton");
 const deleteAllDataButton = document.getElementById("deleteAllDataButton");
 const csvFileInput = document.getElementById("csvFileInput");
+const dataManagementStatus = document.getElementById("dataManagementStatus");
+const exportJsonBackupButton = document.getElementById("exportJsonBackupButton");
+const jsonBackupInput = document.getElementById("jsonBackupInput");
+const csvImportPreview = document.getElementById("csvImportPreview");
+const csvPreviewMode = document.getElementById("csvPreviewMode");
+const csvValidCount = document.getElementById("csvValidCount");
+const csvWarningCount = document.getElementById("csvWarningCount");
+const csvInvalidCount = document.getElementById("csvInvalidCount");
+const csvResultCount = document.getElementById("csvResultCount");
+const csvReplaceWarning = document.getElementById("csvReplaceWarning");
+const csvIssueList = document.getElementById("csvIssueList");
+const confirmCsvImportButton = document.getElementById("confirmCsvImportButton");
+const cancelCsvImportButton = document.getElementById("cancelCsvImportButton");
 const searchInput = document.getElementById("searchInput");
 const channelFilter = document.getElementById("channelFilter");
 const sortSelect = document.getElementById("sortSelect");
@@ -55,6 +68,9 @@ const aiAnalysisPreview = document.getElementById("aiAnalysisPreview");
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
 const COLLAPSE_STORAGE_KEY = "usedClothesCollapsedSections";
+const APP_META_STORAGE_KEY = "usedClothesAppMeta";
+const APP_SCHEMA_VERSION = 1;
+const BACKUP_VERSION = 1;
 
 // localStorageが使えるブラウザかどうかを確認します
 const canUseStorage = typeof localStorage !== "undefined";
@@ -64,6 +80,15 @@ let sales = [];
 
 // セクションごとの折りたたみ状態を入れておくオブジェクトです
 let collapsedSections = {};
+
+// CSVは検証後、確定ボタンを押すまでここに一時保存します
+let pendingCsvImport = null;
+
+// 古いFileReaderの結果が新しい選択へ割り込まないよう、読込ごとに番号を付けます
+let csvImportRequestId = 0;
+
+// 保存データが壊れていた場合、元の文字列を誤って上書きしないための印です
+let storageLoadBlocked = false;
 
 // 編集中の商品idです。nullのときは新規登録モードです
 let editingSaleId = null;
@@ -178,6 +203,143 @@ function calculateProfit(salePrice, costPrice, shippingFee, feeRate) {
     profit,
     profitRate
   };
+}
+
+// JSONが壊れていてもアプリ全体を止めず、呼び出し側で安全に判断できるようにします
+function safeParseJson(jsonText, fallbackValue = null) {
+  if (!jsonText) {
+    return { ok: true, value: fallbackValue };
+  }
+
+  try {
+    return { ok: true, value: JSON.parse(jsonText) };
+  } catch (error) {
+    return { ok: false, value: fallbackValue, error };
+  }
+}
+
+// データ管理の状態を、色だけでなく文章でも利用者へ伝えます
+function showDataManagementStatus(message, type = "success") {
+  dataManagementStatus.textContent = message;
+  dataManagementStatus.classList.toggle("is-warning", type === "warning");
+  dataManagementStatus.classList.toggle("is-error", type === "error");
+}
+
+// 空欄と0を区別しながら、有限な数値だけを返します
+function parseOptionalNumber(value) {
+  if (value === "" || value === null || value === undefined) {
+    return null;
+  }
+
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function getFiniteNumber(value, fallbackValue = 0) {
+  const numberValue = parseOptionalNumber(value);
+  return numberValue === null ? fallbackValue : numberValue;
+}
+
+// YYYY-MM-DDとして実在する日付かを確認します
+function isValidDateText(dateText) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText || "")) {
+    return false;
+  }
+
+  const date = parseDateText(dateText);
+  return Boolean(date) && !Number.isNaN(date.getTime());
+}
+
+// 日付の各部分をDateに戻した結果と照合し、2月30日なども除外します
+function isStrictDateText(dateText) {
+  if (!isValidDateText(dateText)) {
+    return false;
+  }
+
+  const date = parseDateText(dateText);
+  const year = String(date.getFullYear()).padStart(4, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}` === dateText;
+}
+
+// 旧データの未知項目は残しつつ、現在必要な項目と計算値を安全に補います
+function normalizeSaleRecord(record, fallbackId = Date.now()) {
+  const source = record && typeof record === "object" ? record : {};
+  const salePrice = getFiniteNumber(source.salePrice, 0);
+  const costPrice = getFiniteNumber(source.costPrice, 0);
+  const shippingFee = getFiniteNumber(source.shippingFee, 0);
+  const feeRate = getFiniteNumber(source.feeRate, 0);
+  const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
+  const saleDate = typeof source.saleDate === "string" ? source.saleDate : "";
+  const purchaseDate = typeof source.purchaseDate === "string" ? source.purchaseDate : "";
+
+  return {
+    ...source,
+    id: source.id ?? fallbackId,
+    saleDate,
+    purchaseDate,
+    salesChannel: typeof source.salesChannel === "string" ? source.salesChannel : "",
+    itemName: typeof source.itemName === "string" ? source.itemName : "",
+    salePrice,
+    costPrice,
+    shippingFee,
+    feeRate,
+    fee: calculated.fee,
+    profit: calculated.profit,
+    profitRate: calculated.profitRate,
+    // 0日も正しい値なので、truthy判定を使わず日付から再計算します
+    saleDays: calculateSaleDays(saleDate, purchaseDate),
+    imageData: typeof source.imageData === "string" ? source.imageData : "",
+    memo: typeof source.memo === "string" ? source.memo : ""
+  };
+}
+
+function createDefaultAppMeta() {
+  return {
+    schemaVersion: APP_SCHEMA_VERSION,
+    migratedAt: new Date().toISOString()
+  };
+}
+
+function loadAppMeta() {
+  if (!canUseStorage) {
+    return createDefaultAppMeta();
+  }
+
+  let savedMeta = null;
+
+  try {
+    savedMeta = localStorage.getItem(APP_META_STORAGE_KEY);
+  } catch (error) {
+    return createDefaultAppMeta();
+  }
+
+  const parsed = safeParseJson(savedMeta, null);
+
+  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
+    return createDefaultAppMeta();
+  }
+
+  return {
+    ...parsed.value,
+    schemaVersion: APP_SCHEMA_VERSION,
+    migratedAt: parsed.value.migratedAt || new Date().toISOString()
+  };
+}
+
+function saveAppMeta(appMeta) {
+  if (!canUseStorage) {
+    return true;
+  }
+
+  try {
+    localStorage.setItem(APP_META_STORAGE_KEY, JSON.stringify(appMeta));
+    return true;
+  } catch (error) {
+    showDataManagementStatus("アプリ情報を保存できませんでした。ブラウザの保存容量を確認してください。", "error");
+    return false;
+  }
 }
 
 // フォーム上部のエラー表示を消します
@@ -345,50 +507,173 @@ function parseCsvText(csvText) {
   return rows;
 }
 
-// CSVの文字列データを、アプリで使う商品データの形に戻します
-function csvRowToSale(headerIndexes, row) {
-  const salePrice = Number(row[headerIndexes["売値"]] || 0);
-  const costPrice = Number(row[headerIndexes["仕入れ値"]] || 0);
-  const shippingFee = Number(row[headerIndexes["送料"]] || 0);
-  const feeRate = Number(row[headerIndexes["販売手数料率"]] || 0);
-  const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
-  const importedId = Number(row[headerIndexes.id]);
-  const saleDate = row[headerIndexes["販売日"]] || getTodayText();
-  const purchaseDate = row[headerIndexes["仕入日"]] || "";
-  const saleDays = calculateSaleDays(saleDate, purchaseDate);
+function getCsvValue(headerIndexes, row, headerName) {
+  const index = headerIndexes[headerName];
+  return index === undefined ? "" : String(row[index] ?? "").trim();
+}
 
-  return {
-    id: importedId || Date.now() + Math.floor(Math.random() * 100000),
+function numbersDiffer(firstValue, secondValue, tolerance = 0.01) {
+  return Math.abs(firstValue - secondValue) > tolerance;
+}
+
+// CSVの1行を検証し、登録可能なデータと警告を分けて返します
+function validateCsvRow(headerIndexes, row, rowNumber) {
+  const errors = [];
+  const warnings = [];
+  const saleDate = getCsvValue(headerIndexes, row, "販売日");
+  const purchaseDate = getCsvValue(headerIndexes, row, "仕入日");
+  const salesChannel = getCsvValue(headerIndexes, row, "販路");
+  const itemName = getCsvValue(headerIndexes, row, "商品名");
+  const salePrice = parseOptionalNumber(getCsvValue(headerIndexes, row, "売値"));
+  const costText = getCsvValue(headerIndexes, row, "仕入れ値");
+  const shippingText = getCsvValue(headerIndexes, row, "送料");
+  const feeRateText = getCsvValue(headerIndexes, row, "販売手数料率");
+  const costPrice = costText === "" ? 0 : parseOptionalNumber(costText);
+  const shippingFee = shippingText === "" ? 0 : parseOptionalNumber(shippingText);
+  const feeRate = feeRateText === "" ? 0 : parseOptionalNumber(feeRateText);
+
+  if (!isStrictDateText(saleDate)) {
+    errors.push("販売日が正しい日付ではありません");
+  }
+
+  if (purchaseDate && !isStrictDateText(purchaseDate)) {
+    errors.push("仕入日が正しい日付ではありません");
+  } else if (purchaseDate && saleDate && calculateSaleDays(saleDate, purchaseDate) < 0) {
+    errors.push("仕入日が販売日より後です");
+  }
+
+  if (!salesChannels.includes(salesChannel)) {
+    errors.push("販路が登録済みの選択肢ではありません");
+  }
+
+  if (!itemName) {
+    errors.push("商品名が空欄です");
+  }
+
+  if (salePrice === null || salePrice < 1) {
+    errors.push("売値は1円以上で入力してください");
+  }
+
+  if (costPrice === null || costPrice < 0) {
+    errors.push("仕入れ値は0円以上で入力してください");
+  }
+
+  if (shippingFee === null || shippingFee < 0) {
+    errors.push("送料は0円以上で入力してください");
+  }
+
+  if (feeRate === null || feeRate < 0 || feeRate > 100) {
+    errors.push("販売手数料率は0〜100で入力してください");
+  }
+
+  if (errors.length > 0) {
+    return { rowNumber, errors, warnings, sale: null };
+  }
+
+  const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
+  const importedFee = parseOptionalNumber(getCsvValue(headerIndexes, row, "手数料"));
+  const importedProfit = parseOptionalNumber(getCsvValue(headerIndexes, row, "利益"));
+  const importedProfitRate = parseOptionalNumber(getCsvValue(headerIndexes, row, "利益率"));
+  const importedSaleDaysText = getCsvValue(headerIndexes, row, "販売日数").replace(/日$/, "");
+  const importedSaleDays = parseOptionalNumber(importedSaleDaysText);
+  const calculatedSaleDays = calculateSaleDays(saleDate, purchaseDate);
+
+  if (importedFee !== null && numbersDiffer(importedFee, calculated.fee)) {
+    warnings.push("手数料を入力値から再計算しました");
+  }
+
+  if (importedProfit !== null && numbersDiffer(importedProfit, calculated.profit)) {
+    warnings.push("利益を入力値から再計算しました");
+  }
+
+  if (importedProfitRate !== null && numbersDiffer(importedProfitRate, calculated.profitRate)) {
+    warnings.push("利益率を入力値から再計算しました");
+  }
+
+  if (importedSaleDays !== null && importedSaleDays !== calculatedSaleDays) {
+    warnings.push("販売日数を販売日と仕入日から再計算しました");
+  }
+
+  const importedId = parseOptionalNumber(getCsvValue(headerIndexes, row, "id"));
+  const sale = normalizeSaleRecord({
+    id: importedId ?? Date.now() + rowNumber,
     saleDate,
     purchaseDate,
-    salesChannel: row[headerIndexes["販路"]] || "メルカリメイン",
-    itemName: row[headerIndexes["商品名"]] || "名称未設定",
+    salesChannel,
+    itemName,
     salePrice,
     costPrice,
     shippingFee,
     feeRate,
-    fee: Number(row[headerIndexes["手数料"]]) || calculated.fee,
-    profit: Number(row[headerIndexes["利益"]]) || calculated.profit,
-    profitRate: Number(row[headerIndexes["利益率"]]) || calculated.profitRate,
-    saleDays,
     imageData: "",
-    memo: row[headerIndexes["メモ"]] || ""
-  };
+    memo: getCsvValue(headerIndexes, row, "メモ")
+  }, Date.now() + rowNumber);
+
+  return { rowNumber, errors, warnings, sale };
 }
 
-// CSVファイルの内容を、登録データ配列に変換します
-function csvTextToSales(csvText) {
+// 必須ヘッダーと各行を検証し、保存前のプレビュー用データを作ります
+function validateCsvText(csvText) {
   const rows = parseCsvText(csvText);
   const headers = rows[0] || [];
-  const headerIndexes = {};
+  const requiredHeaders = ["販売日", "販路", "商品名", "売値"];
+  const missingHeaders = requiredHeaders.filter(function (header) {
+    return !headers.includes(header);
+  });
 
+  if (missingHeaders.length > 0) {
+    return {
+      sales: [],
+      validCount: 0,
+      warningCount: 0,
+      invalidCount: Math.max(rows.length - 1, 0),
+      issues: [`必須列がありません: ${missingHeaders.join("、")}`],
+      fatalError: true
+    };
+  }
+
+  const headerIndexes = {};
   headers.forEach(function (header, index) {
     headerIndexes[header] = index;
   });
 
-  return rows.slice(1).map(function (row) {
-    return csvRowToSale(headerIndexes, row);
+  const results = rows.slice(1).map(function (row, index) {
+    return validateCsvRow(headerIndexes, row, index + 2);
   });
+  const acceptedRows = results.filter(function (result) {
+    return result.sale;
+  });
+  const issues = [];
+
+  results.forEach(function (result) {
+    if (result.errors.length > 0) {
+      issues.push(`${result.rowNumber}行目: ${result.errors.join("、")}`);
+    } else if (result.warnings.length > 0) {
+      issues.push(`${result.rowNumber}行目（警告）: ${result.warnings.join("、")}`);
+    }
+  });
+
+  return {
+    sales: acceptedRows.map(function (result) {
+      return result.sale;
+    }),
+    validCount: acceptedRows.filter(function (result) {
+      return result.warnings.length === 0;
+    }).length,
+    warningCount: acceptedRows.filter(function (result) {
+      return result.warnings.length > 0;
+    }).length,
+    invalidCount: results.filter(function (result) {
+      return !result.sale;
+    }).length,
+    issues,
+    fatalError: false
+  };
+}
+
+// 以前の呼び出しとの互換用に、検証を通った商品だけを返します
+function csvTextToSales(csvText) {
+  return validateCsvText(csvText).sales;
 }
 
 // 指定したデータをCSVファイルとしてダウンロードします
@@ -435,56 +720,153 @@ function ensureUniqueImportedIds(importedSales, baseSales) {
     return sale.id;
   }));
 
-  return importedSales.map(function (sale) {
-    if (usedIds.has(sale.id)) {
-      sale.id = Date.now() + Math.floor(Math.random() * 100000);
+  return importedSales.map(function (sale, index) {
+    let nextId = sale.id;
+
+    if (usedIds.has(nextId)) {
+      nextId = Date.now() + index + Math.floor(Math.random() * 100000);
     }
 
-    usedIds.add(sale.id);
-    return sale;
+    usedIds.add(nextId);
+    return { ...sale, id: nextId };
   });
 }
 
-// CSVファイルを読み込み、追加または置き換えでアプリに反映します
-function importCsv(file, importMode) {
+function getSelectedCsvImportMode() {
+  return document.querySelector("input[name='importMode']:checked").value;
+}
+
+function updateCsvImportPreview() {
+  if (!pendingCsvImport) {
+    csvImportPreview.hidden = true;
+    return;
+  }
+
+  const importMode = getSelectedCsvImportMode();
+  const isReplaceMode = importMode === "replace";
+  const resultCount = isReplaceMode
+    ? pendingCsvImport.sales.length
+    : sales.length + pendingCsvImport.sales.length;
+
+  csvPreviewMode.textContent = isReplaceMode ? "現在のデータを置き換える" : "現在のデータに追加する";
+  csvValidCount.textContent = `${pendingCsvImport.validCount}件`;
+  csvWarningCount.textContent = `${pendingCsvImport.warningCount}件`;
+  csvInvalidCount.textContent = `${pendingCsvImport.invalidCount}件`;
+  csvResultCount.textContent = `${resultCount}件`;
+  csvReplaceWarning.hidden = !isReplaceMode;
+  csvIssueList.innerHTML = "";
+
+  pendingCsvImport.issues.slice(0, 50).forEach(function (issueText) {
+    const item = document.createElement("li");
+    item.textContent = issueText;
+    csvIssueList.appendChild(item);
+  });
+
+  if (pendingCsvImport.issues.length > 50) {
+    const item = document.createElement("li");
+    item.textContent = `ほか${pendingCsvImport.issues.length - 50}件`;
+    csvIssueList.appendChild(item);
+  }
+
+  confirmCsvImportButton.disabled = pendingCsvImport.sales.length === 0 || pendingCsvImport.fatalError;
+  csvImportPreview.hidden = false;
+}
+
+function clearPendingCsvImport() {
+  csvImportRequestId += 1;
+  pendingCsvImport = null;
+  csvFileInput.disabled = false;
+  csvFileInput.value = "";
+  csvImportPreview.hidden = true;
+  csvIssueList.innerHTML = "";
+}
+
+// CSVファイルは選択時に検証するだけで、確定ボタンを押すまで保存しません
+function stageCsvImport(file) {
   const reader = new FileReader();
+  const requestId = csvImportRequestId + 1;
+  csvImportRequestId = requestId;
+  pendingCsvImport = null;
+  csvImportPreview.hidden = true;
+  csvFileInput.disabled = true;
+  showDataManagementStatus("CSVを検証しています。", "warning");
+
+  function finalizeCsvStaging() {
+    if (requestId === csvImportRequestId) {
+      csvFileInput.disabled = false;
+    }
+  }
 
   reader.onload = function () {
-    const importedSales = csvTextToSales(reader.result);
+    try {
+      if (requestId !== csvImportRequestId) {
+        return;
+      }
 
-    if (importedSales.length === 0) {
-      alert("読み込めるデータがありませんでした。");
-      csvFileInput.value = "";
-      return;
+      pendingCsvImport = validateCsvText(String(reader.result || ""));
+      updateCsvImportPreview();
+
+      const acceptedCount = pendingCsvImport.validCount + pendingCsvImport.warningCount;
+      const statusType = pendingCsvImport.invalidCount > 0 || pendingCsvImport.fatalError ? "warning" : "success";
+      showDataManagementStatus(
+        `CSVを検証しました。読み込み可能${acceptedCount}件、除外${pendingCsvImport.invalidCount}件です。内容を確認して確定してください。`,
+        statusType
+      );
+    } catch (error) {
+      pendingCsvImport = null;
+      csvImportPreview.hidden = true;
+      showDataManagementStatus("CSVの検証中にエラーが発生しました。ファイル内容を確認してください。", "error");
+    } finally {
+      finalizeCsvStaging();
     }
-
-    const isReplaceMode = importMode === "replace";
-    const message = isReplaceMode
-      ? "現在のデータをCSVの内容で置き換えます。よろしいですか？"
-      : "CSVの内容を現在のデータに追加します。よろしいですか？";
-
-    if (!confirm(message)) {
-      csvFileInput.value = "";
-      return;
-    }
-
-    // CSVには画像を含めないため、読み込んだ商品は画像なしになります
-    const baseSales = isReplaceMode ? [] : sales;
-    const safeImportedSales = ensureUniqueImportedIds(importedSales, baseSales);
-
-    sales = isReplaceMode ? safeImportedSales : [...safeImportedSales, ...sales];
-    saveSales();
-    resetForm();
-    renderDashboard();
-    csvFileInput.value = "";
   };
 
   reader.onerror = function () {
-    alert("CSVファイルを読み込めませんでした。");
-    csvFileInput.value = "";
+    if (requestId === csvImportRequestId) {
+      pendingCsvImport = null;
+      csvImportPreview.hidden = true;
+      showDataManagementStatus("CSVファイルを読み込めませんでした。ファイル形式を確認してください。", "error");
+    }
+
+    finalizeCsvStaging();
   };
 
-  reader.readAsText(file, "utf-8");
+  try {
+    reader.readAsText(file, "utf-8");
+  } catch (error) {
+    pendingCsvImport = null;
+    csvImportPreview.hidden = true;
+    showDataManagementStatus("CSVファイルの読み込みを開始できませんでした。", "error");
+    finalizeCsvStaging();
+  }
+}
+
+function confirmCsvImport() {
+  if (!pendingCsvImport || pendingCsvImport.sales.length === 0) {
+    return;
+  }
+
+  const importMode = getSelectedCsvImportMode();
+  const isReplaceMode = importMode === "replace";
+  const message = isReplaceMode
+    ? "CSVの内容で現在のデータを置き換えます。既存画像は失われます。実行しますか？"
+    : "検証済みのCSVデータを現在のデータへ追加しますか？";
+
+  if (!confirm(message)) {
+    return;
+  }
+
+  const baseSales = isReplaceMode ? [] : sales;
+  const safeImportedSales = ensureUniqueImportedIds(pendingCsvImport.sales, baseSales);
+  const nextSales = isReplaceMode ? safeImportedSales : [...safeImportedSales, ...sales];
+
+  if (!commitSales(nextSales, `CSVから${safeImportedSales.length}件を読み込みました。`)) {
+    return;
+  }
+
+  clearPendingCsvImport();
+  resetForm();
+  renderDashboard();
 }
 
 // 選択された画像を、localStorageに保存しやすい小さなJPEG画像へ変換します
@@ -1079,26 +1461,345 @@ async function copyAiAnalysisText() {
   }
 }
 
-// localStorageから登録済みデータを読み込みます
+// localStorageから登録済みデータを安全に読み込みます
 function loadSales() {
   if (!canUseStorage) {
+    exportJsonBackupButton.disabled = true;
+    showDataManagementStatus("このブラウザでは端末内保存を利用できません。", "warning");
     return;
   }
 
-  const savedSales = localStorage.getItem(STORAGE_KEY);
+  let savedSales = null;
 
-  if (savedSales) {
-    sales = JSON.parse(savedSales);
+  try {
+    savedSales = localStorage.getItem(STORAGE_KEY);
+  } catch (error) {
+    storageLoadBlocked = true;
+    exportJsonBackupButton.disabled = true;
+    showDataManagementStatus("端末内の保存領域を読み込めませんでした。ブラウザの設定を確認してください。", "error");
+    return;
+  }
+
+  if (!savedSales) {
+    sales = [];
+    storageLoadBlocked = false;
+    exportJsonBackupButton.disabled = false;
+    showDataManagementStatus("保存データは0件です。JSON完全バックアップを定期的に保存してください。");
+    return;
+  }
+
+  const parsed = safeParseJson(savedSales, null);
+
+  if (!parsed.ok || !Array.isArray(parsed.value)) {
+    sales = [];
+    storageLoadBlocked = true;
+    exportJsonBackupButton.disabled = true;
+    showDataManagementStatus(
+      "端末内の売上データが壊れているため読み込めませんでした。元データは上書きしていません。JSONバックアップを復元してください。",
+      "error"
+    );
+    return;
+  }
+
+  sales = parsed.value.map(function (sale, index) {
+    return normalizeSaleRecord(sale, Date.now() + index);
+  });
+  storageLoadBlocked = false;
+  exportJsonBackupButton.disabled = false;
+  showDataManagementStatus(`${sales.length}件の保存データを安全に読み込みました。`);
+}
+
+// 保存容量超過などを捕捉し、成功した場合だけ呼び出し側が配列を更新できるようにします
+function saveSales(nextSales = sales, options = {}) {
+  if (!canUseStorage) {
+    return true;
+  }
+
+  if (storageLoadBlocked) {
+    showDataManagementStatus(
+      "壊れた保存データを保護しているため上書きできません。JSONバックアップを復元してから操作してください。",
+      "error"
+    );
+    return false;
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSales));
+    return true;
+  } catch (error) {
+    if (!options.silent) {
+      showDataManagementStatus(
+        "保存できませんでした。商品画像によりブラウザの保存容量を超えた可能性があります。データは変更していません。",
+        "error"
+      );
+    }
+    return false;
   }
 }
 
-// 現在の登録済みデータをlocalStorageに保存します
-function saveSales() {
-  if (!canUseStorage) {
+// 配列とlocalStorageを同時に確定し、保存失敗時は現在の画面データを維持します
+function commitSales(nextSales, successMessage) {
+  if (!saveSales(nextSales)) {
+    return false;
+  }
+
+  sales = nextSales;
+
+  if (successMessage) {
+    showDataManagementStatus(successMessage);
+  }
+
+  return true;
+}
+
+function downloadTextFile(text, fileName, mimeType) {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// 商品画像と設定を含む、アプリ全体の完全バックアップを作ります
+function buildJsonBackup() {
+  return {
+    backupVersion: BACKUP_VERSION,
+    createdAt: new Date().toISOString(),
+    appMeta: loadAppMeta(),
+    sales,
+    collapsedSections
+  };
+}
+
+function downloadJsonBackup() {
+  if (storageLoadBlocked) {
+    showDataManagementStatus(
+      "破損した保存データを空のバックアップで上書きしないため、完全バックアップを停止しています。正常なJSONバックアップを復元してください。",
+      "error"
+    );
     return;
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sales));
+  const backup = buildJsonBackup();
+  downloadTextFile(
+    JSON.stringify(backup, null, 2),
+    `used-clothes-backup-${getTodayText()}.json`,
+    "application/json;charset=utf-8"
+  );
+  showDataManagementStatus(`画像を含む${sales.length}件の完全バックアップを保存しました。`);
+}
+
+function validateBackupSale(sale, index) {
+  const reasons = [];
+  const rowLabel = `${index + 1}件目`;
+  const salePrice = parseOptionalNumber(sale.salePrice);
+  const costPrice = parseOptionalNumber(sale.costPrice);
+  const shippingFee = parseOptionalNumber(sale.shippingFee);
+  const feeRate = parseOptionalNumber(sale.feeRate);
+
+  if (!isStrictDateText(sale.saleDate)) {
+    reasons.push("販売日が正しい日付ではありません");
+  }
+
+  if (sale.purchaseDate && !isStrictDateText(sale.purchaseDate)) {
+    reasons.push("仕入日が正しい日付ではありません");
+  } else if (sale.purchaseDate && sale.saleDate && calculateSaleDays(sale.saleDate, sale.purchaseDate) < 0) {
+    reasons.push("仕入日が販売日より後です");
+  }
+
+  if (!salesChannels.includes(sale.salesChannel)) {
+    reasons.push("販路が登録済みの選択肢ではありません");
+  }
+
+  if (typeof sale.itemName !== "string" || !sale.itemName.trim()) {
+    reasons.push("商品名が空欄です");
+  }
+
+  if (salePrice === null || salePrice < 1) {
+    reasons.push("売値は1円以上である必要があります");
+  }
+
+  if (costPrice === null || costPrice < 0) {
+    reasons.push("仕入れ値は0円以上である必要があります");
+  }
+
+  if (shippingFee === null || shippingFee < 0) {
+    reasons.push("送料は0円以上である必要があります");
+  }
+
+  if (feeRate === null || feeRate < 0 || feeRate > 100) {
+    reasons.push("販売手数料率は0〜100である必要があります");
+  }
+
+  return reasons.length > 0 ? `${rowLabel}: ${reasons.join("、")}` : "";
+}
+
+function validateJsonBackup(backup) {
+  const errors = [];
+  const invalidSaleReasons = [];
+
+  if (!backup || typeof backup !== "object") {
+    errors.push("JSONの内容がバックアップ形式ではありません。");
+  } else {
+    if (backup.backupVersion !== BACKUP_VERSION) {
+      errors.push("対応していないバックアップのバージョンです。");
+    }
+
+    if (!Array.isArray(backup.sales)) {
+      errors.push("売上データが配列ではありません。");
+    } else if (backup.sales.some(function (sale) {
+      return !sale || typeof sale !== "object" || Array.isArray(sale);
+    })) {
+      errors.push("売上データに不正な形式の項目があります。");
+    } else {
+      backup.sales.forEach(function (sale, index) {
+        const reason = validateBackupSale(sale, index);
+
+        if (reason) {
+          invalidSaleReasons.push(reason);
+        }
+      });
+
+      if (invalidSaleReasons.length > 0) {
+        errors.push(
+          `売上データ${invalidSaleReasons.length}件が不正です。先頭の理由: ${invalidSaleReasons[0]}`
+        );
+      }
+    }
+
+    if (!backup.appMeta || typeof backup.appMeta !== "object") {
+      errors.push("アプリ情報がありません。");
+    }
+
+    if (!backup.collapsedSections || typeof backup.collapsedSections !== "object" || Array.isArray(backup.collapsedSections)) {
+      errors.push("折りたたみ設定の形式が正しくありません。");
+    }
+  }
+
+  return {
+    errors,
+    invalidSaleCount: invalidSaleReasons.length,
+    firstInvalidSaleReason: invalidSaleReasons[0] || ""
+  };
+}
+
+function restoreStorageValue(storageKey, previousValue) {
+  if (previousValue === null) {
+    localStorage.removeItem(storageKey);
+  } else {
+    localStorage.setItem(storageKey, previousValue);
+  }
+}
+
+function finalizeJsonRestoreControls() {
+  exportJsonBackupButton.disabled = storageLoadBlocked;
+  jsonBackupInput.disabled = false;
+  jsonBackupInput.value = "";
+}
+
+// 復元処理は全項目の保存に成功した場合だけ画面へ反映します
+function restoreJsonBackup(file) {
+  if (!canUseStorage) {
+    showDataManagementStatus("このブラウザではJSONバックアップを復元できません。", "error");
+    jsonBackupInput.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+  exportJsonBackupButton.disabled = true;
+  jsonBackupInput.disabled = true;
+  showDataManagementStatus("JSONバックアップを検証しています。", "warning");
+
+  reader.onload = function () {
+    try {
+      const parsed = safeParseJson(String(reader.result || ""), null);
+      const validation = parsed.ok
+        ? validateJsonBackup(parsed.value)
+        : { errors: ["JSONファイルを解析できません。"] };
+
+      if (validation.errors.length > 0) {
+        showDataManagementStatus(`復元できませんでした。${validation.errors.join(" ")}`, "error");
+        return;
+      }
+
+      const backup = parsed.value;
+      const normalizedSales = backup.sales.map(function (sale, index) {
+        return normalizeSaleRecord(sale, Date.now() + index);
+      });
+
+      if (!confirm(`${normalizedSales.length}件の売上データと設定を復元します。現在のデータは置き換わります。実行しますか？`)) {
+        showDataManagementStatus("JSONバックアップの復元をキャンセルしました。", "warning");
+        return;
+      }
+
+      let previousValues;
+
+      try {
+        // 読み取り自体が禁止されている環境でも、必ずUIを元に戻して現在データを維持します
+        previousValues = {
+          sales: localStorage.getItem(STORAGE_KEY),
+          meta: localStorage.getItem(APP_META_STORAGE_KEY),
+          collapsed: localStorage.getItem(COLLAPSE_STORAGE_KEY)
+        };
+      } catch (error) {
+        showDataManagementStatus(
+          "端末内の現在データを確認できないため復元を中止しました。ブラウザの保存設定を確認してください。",
+          "error"
+        );
+        return;
+      }
+
+      const restoredMeta = {
+        ...backup.appMeta,
+        schemaVersion: APP_SCHEMA_VERSION,
+        migratedAt: new Date().toISOString()
+      };
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedSales));
+        localStorage.setItem(APP_META_STORAGE_KEY, JSON.stringify(restoredMeta));
+        localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(backup.collapsedSections));
+      } catch (error) {
+        try {
+          restoreStorageValue(STORAGE_KEY, previousValues.sales);
+          restoreStorageValue(APP_META_STORAGE_KEY, previousValues.meta);
+          restoreStorageValue(COLLAPSE_STORAGE_KEY, previousValues.collapsed);
+        } catch (rollbackError) {
+          console.error("バックアップ復元のロールバックに失敗しました。", rollbackError);
+        }
+
+        showDataManagementStatus(
+          "保存容量不足などにより復元できませんでした。復元前のデータを維持しています。",
+          "error"
+        );
+        return;
+      }
+
+      sales = normalizedSales;
+      collapsedSections = { ...backup.collapsedSections };
+      storageLoadBlocked = false;
+      applyCollapsedSectionViews();
+      resetForm();
+      renderDashboard();
+      showDataManagementStatus(`${sales.length}件の売上データと設定を復元しました。`);
+    } finally {
+      finalizeJsonRestoreControls();
+    }
+  };
+
+  reader.onerror = function () {
+    showDataManagementStatus("JSONバックアップを読み込めませんでした。", "error");
+    finalizeJsonRestoreControls();
+  };
+
+  try {
+    reader.readAsText(file, "utf-8");
+  } catch (error) {
+    showDataManagementStatus("JSONバックアップの読み込みを開始できませんでした。", "error");
+    finalizeJsonRestoreControls();
+  }
 }
 
 // localStorageからセクションの折りたたみ状態を読み込みます
@@ -1108,18 +1809,28 @@ function loadCollapsedSections() {
     return;
   }
 
-  const savedState = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+  let savedState = null;
+
+  try {
+    savedState = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+  } catch (error) {
+    collapsedSections = {};
+    return;
+  }
 
   if (!savedState) {
     collapsedSections = {};
     return;
   }
 
-  try {
-    collapsedSections = JSON.parse(savedState);
-  } catch (error) {
+  const parsed = safeParseJson(savedState, {});
+
+  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
     collapsedSections = {};
+    return;
   }
+
+  collapsedSections = parsed.value;
 }
 
 // セクションの折りたたみ状態をlocalStorageに保存します
@@ -1128,7 +1839,11 @@ function saveCollapsedSections() {
     return;
   }
 
-  localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedSections));
+  try {
+    localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedSections));
+  } catch (error) {
+    showDataManagementStatus("折りたたみ設定を保存できませんでした。売上データには影響ありません。", "warning");
+  }
 }
 
 // 1つのセクションを開く・閉じる表示に更新します
@@ -1157,6 +1872,14 @@ function setSectionCollapsed(sectionId, isCollapsed) {
   collapsedSections[sectionId] = isCollapsed;
   updateSectionCollapseView(section, isCollapsed);
   saveCollapsedSections();
+}
+
+// イベントを重複登録せず、現在の設定だけを各セクションへ反映します
+function applyCollapsedSectionViews() {
+  document.querySelectorAll("[data-section-id]").forEach(function (section) {
+    const sectionId = section.dataset.sectionId;
+    updateSectionCollapseView(section, Boolean(collapsedSections[sectionId]));
+  });
 }
 
 // data-section-idが付いた各セクションに、折りたたみボタンの処理を付けます
@@ -1230,7 +1953,7 @@ function startEditSale(id) {
   document.getElementById("salePrice").value = sale.salePrice;
   document.getElementById("costPrice").value = sale.costPrice;
   document.getElementById("shippingFee").value = sale.shippingFee;
-  document.getElementById("feeRate").value = sale.feeRate || "10";
+  document.getElementById("feeRate").value = sale.feeRate ?? "10";
   document.getElementById("memo").value = sale.memo || "";
 
   // 既存画像がある場合は、画像データを保持してプレビューも表示します
@@ -1753,15 +2476,18 @@ function deleteSale(id) {
     return;
   }
 
-  sales = sales.filter(function (sale) {
+  const nextSales = sales.filter(function (sale) {
     return sale.id !== id;
   });
+
+  if (!commitSales(nextSales, "商品を削除しました。")) {
+    return;
+  }
 
   if (editingSaleId === id) {
     resetForm();
   }
 
-  saveSales();
   renderDashboard();
 }
 
@@ -1775,14 +2501,24 @@ function deleteAllData() {
     return;
   }
 
-  sales = [];
-
-  if (canUseStorage) {
-    localStorage.removeItem(STORAGE_KEY);
+  if (storageLoadBlocked) {
+    showDataManagementStatus("壊れた保存データを保護しているため削除できません。JSONバックアップを復元してください。", "error");
+    return;
   }
 
+  if (canUseStorage) {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      showDataManagementStatus("全データを削除できませんでした。元データを維持しています。", "error");
+      return;
+    }
+  }
+
+  sales = [];
   resetForm();
   renderDashboard();
+  showDataManagementStatus("登録済みの売上データをすべて削除しました。");
 }
 
 // 月を変更したら、一覧と集計を自動で切り替えます
@@ -1847,7 +2583,19 @@ deleteAllDataButton.addEventListener("click", function () {
   deleteAllData();
 });
 
-// CSVファイルが選ばれたら、追加または置き換えで読み込みます
+exportJsonBackupButton.addEventListener("click", function () {
+  downloadJsonBackup();
+});
+
+jsonBackupInput.addEventListener("change", function () {
+  const file = jsonBackupInput.files[0];
+
+  if (file) {
+    restoreJsonBackup(file);
+  }
+});
+
+// CSVファイルが選ばれたら、まず検証結果だけを表示します
 csvFileInput.addEventListener("change", function () {
   const file = csvFileInput.files[0];
 
@@ -1855,8 +2603,22 @@ csvFileInput.addEventListener("change", function () {
     return;
   }
 
-  const importMode = document.querySelector("input[name='importMode']:checked").value;
-  importCsv(file, importMode);
+  stageCsvImport(file);
+});
+
+document.querySelectorAll("input[name='importMode']").forEach(function (radio) {
+  radio.addEventListener("change", function () {
+    updateCsvImportPreview();
+  });
+});
+
+confirmCsvImportButton.addEventListener("click", function () {
+  confirmCsvImport();
+});
+
+cancelCsvImportButton.addEventListener("click", function () {
+  clearPendingCsvImport();
+  showDataManagementStatus("CSV読み込みをキャンセルしました。", "warning");
 });
 
 // 編集中に画像を消したい場合は、削除予約をしてプレビューも消します
@@ -1959,10 +2721,17 @@ form.addEventListener("submit", async function (event) {
 
   const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
   const saleDays = calculateSaleDays(saleDate, purchaseDate);
+  const existingSale = editingSaleId === null
+    ? null
+    : sales.find(function (targetSale) {
+      return targetSale.id === editingSaleId;
+    });
 
   // 登録または更新する1件分のデータを作ります
   const sale = {
-    id: editingSaleId || Date.now(),
+    // 編集時は既存データを先にコピーし、将来追加される未知の項目も消さないようにします
+    ...(existingSale || {}),
+    id: editingSaleId ?? Date.now(),
     saleDate,
     purchaseDate,
     salesChannel,
@@ -1979,17 +2748,24 @@ form.addEventListener("submit", async function (event) {
     memo
   };
 
-  if (editingSaleId) {
+  let nextSales;
+
+  if (editingSaleId !== null) {
     // 編集中のときは、新規追加せず既存データを上書きします
-    sales = sales.map(function (targetSale) {
+    nextSales = sales.map(function (targetSale) {
       return targetSale.id === editingSaleId ? sale : targetSale;
     });
   } else {
     // 新規登録のときは、一覧の先頭に追加します
-    sales.unshift(sale);
+    nextSales = [sale, ...sales];
   }
 
-  saveSales();
+  const successMessage = editingSaleId !== null ? "商品データを更新しました。" : "商品データを登録しました。";
+
+  if (!commitSales(nextSales, successMessage)) {
+    return;
+  }
+
   renderDashboard();
 
   // 次の商品を入力しやすいようにフォームを初期状態へ戻します
@@ -1999,6 +2775,12 @@ form.addEventListener("submit", async function (event) {
 // ページを開いたときに、日付の初期値と保存済みデータを準備します
 monthFilterInput.value = getCurrentMonthText();
 loadSales();
+
+// 既存の売上配列形式は変えず、別キーにスキーマ情報だけを保存します
+if (!storageLoadBlocked) {
+  saveAppMeta(loadAppMeta());
+}
+
 resetForm();
 setupSectionToggles();
 renderDashboard();

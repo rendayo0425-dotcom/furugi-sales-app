@@ -1,6 +1,7 @@
 // キャッシュ名を変えると、古いキャッシュを削除して新しいファイルを使いやすくなります。
-// HTML/CSS/JSを大きく変更したのに反映されないときは、この v8 を v9 のように増やしてください。
-const CACHE_NAME = "used-clothes-sales-v8";
+// HTML/CSS/JSを大きく変更したのに反映されないときは、この v9 を v10 のように増やしてください。
+const CACHE_PREFIX = "used-clothes-sales-";
+const CACHE_NAME = "used-clothes-sales-v9";
 
 // オフラインでも最低限アプリ画面を開けるように、基本ファイルだけ保存します。
 // 画像やCSVは容量が大きくなりやすいので、ここではキャッシュしません。
@@ -30,7 +31,8 @@ self.addEventListener("activate", function (event) {
     caches.keys().then(function (cacheNames) {
       return Promise.all(
         cacheNames.map(function (cacheName) {
-          if (cacheName !== CACHE_NAME) {
+          // 同じサイトにある別アプリのキャッシュを誤って削除しないよう、このアプリの接頭辞だけを対象にします。
+          if (cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
 

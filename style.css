@@ -281,12 +281,76 @@ button:active {
 
 /* CSV出力と読み込みをまとめる管理メニューです */
 .csv-card {
-  border-top: 5px solid #415161;
+  /* Agenticの主要色をデータ管理の目印に使い、他セクションと区別します */
+  border-top: 5px solid #ff5701;
 }
 
 .csv-actions {
   display: grid;
   gap: 16px;
+}
+
+.data-management-status {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-left: 4px solid #16a34a;
+  border-radius: 8px;
+  color: #14532d;
+  background: #f0fdf4;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.data-management-status.is-warning {
+  border-left-color: #d97706;
+  color: #7c2d12;
+  background: #fff7ed;
+}
+
+.data-management-status.is-error {
+  border-left-color: #dc2626;
+  color: #7f1d1d;
+  background: #fef2f2;
+}
+
+.backup-panel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+}
+
+.backup-panel h3,
+.csv-import-box h3,
+.csv-import-preview h4 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.backup-panel p,
+.csv-import-box p {
+  margin: 0;
+  color: #5f6c7b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.backup-panel > button,
+.csv-confirm-actions > button {
+  min-height: 44px;
+}
+
+.backup-panel > button {
+  background: #ff5701;
+}
+
+.backup-panel > button:hover {
+  background: #d94700;
 }
 
 .csv-import-box {
@@ -312,6 +376,84 @@ button:active {
 .import-mode input {
   width: 18px;
   height: 18px;
+}
+
+.csv-import-preview {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #c8d1dc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.csv-import-preview[hidden] {
+  display: none;
+}
+
+.csv-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.csv-preview-summary div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f6f6f1;
+}
+
+.csv-preview-summary dt {
+  color: #5f6c7b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.csv-preview-summary dd {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.data-warning {
+  margin: 0;
+  padding: 12px;
+  border-left: 4px solid #d97706;
+  border-radius: 8px;
+  color: #7c2d12;
+  background: #fff7ed;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.csv-issue-list {
+  max-height: 220px;
+  margin: 0;
+  padding-left: 22px;
+  overflow-y: auto;
+  color: #7f1d1d;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.csv-issue-list:empty {
+  display: none;
+}
+
+.csv-confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.csv-confirm-actions button:disabled,
+.backup-panel button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 /* 一覧の検索・絞り込み・並び替えをまとめるカードです */
@@ -1596,6 +1738,7 @@ button:active {
     max-width: none;
     min-width: 72px;
     min-inline-size: 72px;
+    min-height: 44px;
     justify-self: end;
     white-space: nowrap;
   }
@@ -1607,4 +1750,52 @@ button:active {
     width: 100%;
     max-width: 100%;
   }
+
+  .backup-panel,
+  .csv-import-box,
+  .csv-import-preview {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px;
+    overflow-x: hidden;
+  }
+
+  .csv-preview-summary,
+  .csv-confirm-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .backup-panel label,
+  .backup-panel input,
+  .csv-import-box label,
+  .csv-import-box input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .import-mode label {
+    min-height: 44px;
+    padding: 8px 4px;
+  }
+
+  .import-mode input {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* outlineを消している入力を含め、キーボード操作時は高コントラストの輪郭を必ず表示します */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 3px solid #111827;
+  outline-offset: 2px;
+}
+
+.input-wrap:focus-within {
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(255, 87, 1, 0.35);
 }

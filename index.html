@@ -349,7 +349,7 @@
       </div>
     </section>
 
-    <!-- CSVの出力と読み込みを行う管理メニューです -->
+    <!-- バックアップとCSVの出力・読み込みを行う管理メニューです -->
     <section class="card csv-card" data-section-id="csv">
       <div class="section-header">
         <h2>データ管理</h2>
@@ -357,13 +357,35 @@
       </div>
 
       <div class="section-content">
+      <!-- データ操作の結果や注意点を、色だけでなく文章でも伝えます -->
+      <div id="dataManagementStatus" class="data-management-status" role="status" aria-live="polite">
+        保存データを確認しています。
+      </div>
+
+      <div class="backup-panel">
+        <div>
+          <h3>完全バックアップ</h3>
+          <p>商品画像と折りたたみ設定を含むJSONファイルを保存します。CSVで置き換える前の保存をおすすめします。</p>
+        </div>
+        <button id="exportJsonBackupButton" type="button">JSON完全バックアップ</button>
+        <label for="jsonBackupInput">
+          JSONバックアップを復元
+          <input id="jsonBackupInput" class="field file-field" type="file" accept=".json,application/json">
+        </label>
+      </div>
+
       <div class="csv-actions">
         <button id="exportCsvButton" type="button">全データCSV出力</button>
         <button id="exportMonthCsvButton" class="secondary-button" type="button">表示中の月をCSV出力</button>
 
         <div class="csv-import-box">
+          <div>
+            <h3>CSV読み込み</h3>
+            <p>ファイルを選ぶと、保存前に内容を検証して結果を表示します。</p>
+          </div>
+
           <label for="csvFileInput">
-            CSV読み込み
+            CSVファイル
             <input id="csvFileInput" class="field file-field" type="file" accept=".csv,text/csv">
           </label>
 
@@ -377,6 +399,26 @@
               <input type="radio" name="importMode" value="replace">
               現在のデータを置き換える
             </label>
+          </div>
+
+          <!-- CSVは選択しただけでは保存せず、検証結果を確認してから確定します -->
+          <div id="csvImportPreview" class="csv-import-preview" hidden>
+            <h4>読み込み前の確認</h4>
+            <dl class="csv-preview-summary">
+              <div><dt>読み込み方法</dt><dd id="csvPreviewMode">追加</dd></div>
+              <div><dt>正常</dt><dd id="csvValidCount">0件</dd></div>
+              <div><dt>警告</dt><dd id="csvWarningCount">0件</dd></div>
+              <div><dt>除外</dt><dd id="csvInvalidCount">0件</dd></div>
+              <div><dt>確定後</dt><dd id="csvResultCount">0件</dd></div>
+            </dl>
+            <p id="csvReplaceWarning" class="data-warning" hidden>
+              CSV置換では既存の商品画像がすべて失われます。先にJSON完全バックアップを保存してください。
+            </p>
+            <ul id="csvIssueList" class="csv-issue-list"></ul>
+            <div class="csv-confirm-actions">
+              <button id="confirmCsvImportButton" type="button">検証済みデータを読み込む</button>
+              <button id="cancelCsvImportButton" class="secondary-button" type="button">キャンセル</button>
+            </div>
           </div>
         </div>
 
