@@ -64,6 +64,21 @@ const copyAiAnalysisButton = document.getElementById("copyAiAnalysisButton");
 const refreshAiPreviewButton = document.getElementById("refreshAiPreviewButton");
 const aiCopyStatus = document.getElementById("aiCopyStatus");
 const aiAnalysisPreview = document.getElementById("aiAnalysisPreview");
+// 新しいSPAの共通画面と、ホーム画面の表示場所です
+const routeTitle = document.getElementById("routeTitle");
+const appViews = Array.from(document.querySelectorAll(".app-view"));
+const bottomNavLinks = Array.from(document.querySelectorAll(".bottom-nav a"));
+const analysisTabLinks = Array.from(document.querySelectorAll(".analysis-tabs a"));
+const homeSales = document.getElementById("homeSales");
+const homeProfit = document.getElementById("homeProfit");
+const homeProfitRate = document.getElementById("homeProfitRate");
+const homeMedianSaleDays = document.getElementById("homeMedianSaleDays");
+const homeWithin30Rate = document.getElementById("homeWithin30Rate");
+const homeWithin90Rate = document.getElementById("homeWithin90Rate");
+const homeRecentSales = document.getElementById("homeRecentSales");
+const homeSalesChart = document.getElementById("homeSalesChart");
+const homeTrendPeriod = document.getElementById("homeTrendPeriod");
+const homeTrendTotal = document.getElementById("homeTrendTotal");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -1181,6 +1196,164 @@ function calculateKpi(targetSales) {
   };
 }
 
+// ホームで使う販売速度は、仕入日から販売日数を計算できる商品だけを対象にします
+function calculateSalesSpeed(targetSales) {
+  const saleDaysValues = targetSales
+    .map(function (sale) {
+      return Number.isFinite(sale.saleDays)
+        ? sale.saleDays
+        : calculateSaleDays(sale.saleDate, sale.purchaseDate);
+    })
+    .filter(function (saleDays) {
+      return Number.isFinite(saleDays) && saleDays >= 0;
+    })
+    .sort(function (firstValue, secondValue) {
+      return firstValue - secondValue;
+    });
+
+  if (saleDaysValues.length === 0) {
+    return {
+      median: null,
+      within30Rate: null,
+      within90Rate: null,
+      count: 0
+    };
+  }
+
+  const centerIndex = Math.floor(saleDaysValues.length / 2);
+  const median = saleDaysValues.length % 2 === 0
+    ? (saleDaysValues[centerIndex - 1] + saleDaysValues[centerIndex]) / 2
+    : saleDaysValues[centerIndex];
+  const within30Count = saleDaysValues.filter(function (saleDays) {
+    return saleDays <= 30;
+  }).length;
+  const within90Count = saleDaysValues.filter(function (saleDays) {
+    return saleDays <= 90;
+  }).length;
+
+  return {
+    median,
+    within30Rate: within30Count / saleDaysValues.length * 100,
+    within90Rate: within90Count / saleDaysValues.length * 100,
+    count: saleDaysValues.length
+  };
+}
+
+// 選択中の月の日ごとの売上を、1日から月末まで並べます
+function getDailyTrendValues(targetSales, monthText) {
+  const lastDay = getLastDayOfMonth(monthText);
+  const totals = Array.from({ length: lastDay }, function () {
+    return 0;
+  });
+
+  targetSales.forEach(function (sale) {
+    const day = Number(String(sale.saleDate || "").slice(8, 10));
+
+    if (day >= 1 && day <= lastDay) {
+      totals[day - 1] += Number(sale.salePrice || 0);
+    }
+  });
+
+  return totals;
+}
+
+// 画面名や下部ナビを、現在のハッシュルートへ合わせます
+function getCurrentRoute() {
+  const route = window.location.hash.replace(/^#\/?/, "");
+  const supportedRoutes = [
+    "home",
+    "register",
+    "analysis/overview",
+    "analysis/weekly",
+    "analysis/daily",
+    "analysis/channel",
+    "analysis/monthly",
+    "data/list"
+  ];
+
+  return supportedRoutes.includes(route) ? route : "home";
+}
+
+function getRouteGroup(route) {
+  if (route.startsWith("analysis/")) {
+    return "analysis";
+  }
+
+  if (route.startsWith("data/")) {
+    return "data";
+  }
+
+  return route;
+}
+
+function getRouteTitle(route) {
+  if (route === "home") {
+    return "古着売上管理";
+  }
+
+  if (route === "register") {
+    return editingSaleId === null ? "売上を登録" : "売上を編集";
+  }
+
+  if (route.startsWith("analysis/")) {
+    return "分析";
+  }
+
+  return "売上データ";
+}
+
+function showRoute(options = {}) {
+  const route = getCurrentRoute();
+  const routeGroup = getRouteGroup(route);
+
+  appViews.forEach(function (view) {
+    const directRoute = view.dataset.route;
+    const groupedRoutes = String(view.dataset.routes || "").split(" ").filter(Boolean);
+    view.hidden = directRoute !== route && !groupedRoutes.includes(route);
+  });
+
+  routeTitle.textContent = getRouteTitle(route);
+  bottomNavLinks.forEach(function (link) {
+    const isActive = link.dataset.navGroup === routeGroup;
+    link.classList.toggle("active", isActive);
+
+    if (isActive) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+
+  analysisTabLinks.forEach(function (link) {
+    const linkRoute = link.getAttribute("href").replace(/^#/, "");
+    const isActive = linkRoute === route;
+    link.classList.toggle("active", isActive);
+
+    if (isActive) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+
+  // 暫定分析画面は同じDOMなので、選択した項目まで移動します
+  const legacyTargets = {
+    "analysis/weekly": "weeklySection",
+    "analysis/daily": "dailySection",
+    "analysis/channel": "channelSection",
+    "analysis/monthly": "monthlySection"
+  };
+  const targetId = legacyTargets[route];
+
+  if (targetId && !options.skipScroll) {
+    requestAnimationFrame(function () {
+      document.getElementById(targetId).scrollIntoView({ block: "start" });
+    });
+  } else if (!options.skipScroll) {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+}
+
 // 週間レポート用に、合計・平均・率をまとめて計算します
 function calculateWeeklyMetrics(targetSales) {
   const summary = calculateSummary(targetSales);
@@ -1930,6 +2103,10 @@ function resetForm() {
   editStatus.style.display = "none";
   cancelEditButton.style.display = "none";
   resetImageInput();
+
+  if (getCurrentRoute() === "register") {
+    routeTitle.textContent = "売上を登録";
+  }
 }
 
 // 編集ボタンが押された商品データをフォームへ戻します
@@ -1977,8 +2154,12 @@ function startEditSale(id) {
   submitButton.textContent = "更新する";
   editStatus.style.display = "block";
   cancelEditButton.style.display = "block";
-  setSectionCollapsed("salesForm", false);
-  form.scrollIntoView({ behavior: "smooth", block: "start" });
+  // フォームを復元してから登録画面へ移動し、編集中の画像や値を保ちます
+  window.location.hash = "register";
+  showRoute({ skipScroll: true });
+  requestAnimationFrame(function () {
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 // 1つの商品カードを作ります
@@ -2140,6 +2321,87 @@ function createSaleCard(sale) {
   card.append(compactRow, details);
 
   return card;
+}
+
+// ホーム画面へ、主要実績・販売速度・最近の売上・日次推移をまとめて表示します
+function renderHome(filteredSales) {
+  const summary = calculateSummary(filteredSales);
+  const speed = calculateSalesSpeed(filteredSales);
+  const selectedMonth = monthFilterInput.value;
+
+  homeSales.textContent = formatYen(summary.salesTotal);
+  homeProfit.textContent = formatYen(summary.profitTotal);
+  // ホームの利益率は、利益合計÷売上合計の加重利益率です
+  homeProfitRate.textContent = formatPercent(summary.totalProfitRate);
+  homeMedianSaleDays.textContent = speed.median === null
+    ? "-"
+    : `${Number.isInteger(speed.median) ? speed.median : speed.median.toFixed(1)}日`;
+  homeWithin30Rate.textContent = speed.within30Rate === null ? "-" : formatPercent(speed.within30Rate);
+  homeWithin90Rate.textContent = speed.within90Rate === null ? "-" : formatPercent(speed.within90Rate);
+
+  homeRecentSales.innerHTML = "";
+  const recentSales = [...filteredSales]
+    .sort(function (firstSale, secondSale) {
+      const dateCompare = String(secondSale.saleDate || "").localeCompare(String(firstSale.saleDate || ""));
+      return dateCompare || Number(secondSale.id || 0) - Number(firstSale.id || 0);
+    })
+    .slice(0, 4);
+
+  if (recentSales.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-inline";
+    empty.textContent = "この月の売上はまだありません。";
+    homeRecentSales.appendChild(empty);
+  } else {
+    recentSales.forEach(function (sale) {
+      const item = document.createElement("article");
+      item.className = "recent-sale-item";
+
+      const date = document.createElement("time");
+      date.dateTime = sale.saleDate || "";
+      date.textContent = formatDayLabel(sale.saleDate);
+
+      const name = document.createElement("strong");
+      name.textContent = sale.itemName;
+
+      const price = document.createElement("b");
+      price.textContent = formatYen(sale.salePrice);
+
+      item.append(date, name, price);
+      homeRecentSales.appendChild(item);
+    });
+  }
+
+  const dailyValues = getDailyTrendValues(filteredSales, selectedMonth);
+  const maxValue = Math.max(...dailyValues, 1);
+  homeTrendPeriod.textContent = `${formatMonthLabel(selectedMonth)}の日次売上`;
+  homeTrendTotal.textContent = formatYen(summary.salesTotal);
+  homeSalesChart.innerHTML = "";
+  homeSalesChart.setAttribute(
+    "aria-label",
+    `${formatMonthLabel(selectedMonth)}の日ごとの売上。合計${formatYen(summary.salesTotal)}`
+  );
+
+  dailyValues.forEach(function (value, index) {
+    const day = index + 1;
+    const column = document.createElement("div");
+    column.className = "chart-column";
+    column.title = `${day}日 ${formatYen(value)}`;
+
+    const barWrap = document.createElement("div");
+    barWrap.className = "chart-bar-wrap";
+
+    const bar = document.createElement("div");
+    bar.className = "chart-bar";
+    bar.style.height = `${Math.max(value / maxValue * 100, value > 0 ? 3 : 1)}%`;
+    barWrap.appendChild(bar);
+
+    const label = document.createElement("span");
+    label.textContent = `${day}`;
+
+    column.append(barWrap, label);
+    homeSalesChart.appendChild(column);
+  });
 }
 
 // 全体集計を画面に表示します
@@ -2460,6 +2722,7 @@ function renderDashboard() {
   const filteredSales = getFilteredSales();
   const visibleSales = getVisibleSales(filteredSales);
 
+  renderHome(filteredSales);
   renderMonthlySummary();
   renderTotalSummary(filteredSales);
   renderKpiSummary(filteredSales);
@@ -2524,6 +2787,19 @@ function deleteAllData() {
 // 月を変更したら、一覧と集計を自動で切り替えます
 monthFilterInput.addEventListener("change", function () {
   renderDashboard();
+});
+
+// ブラウザの戻る・進む操作でも、表示画面と下部ナビを同期します
+window.addEventListener("hashchange", function () {
+  const requestedRoute = window.location.hash.replace(/^#\/?/, "");
+  const normalizedRoute = getCurrentRoute();
+
+  if (requestedRoute !== normalizedRoute) {
+    window.location.replace(`#${normalizedRoute}`);
+    return;
+  }
+
+  showRoute();
 });
 
 // 検索キーワードを入力したら、一覧だけを自動で絞り込みます
@@ -2782,5 +3058,15 @@ if (!storageLoadBlocked) {
 }
 
 resetForm();
-setupSectionToggles();
+// 折りたたみUIは廃止しても、JSON互換のため保存済み設定は読み込みます
+loadCollapsedSections();
 renderDashboard();
+
+const initialRequestedRoute = window.location.hash.replace(/^#\/?/, "");
+const initialRoute = getCurrentRoute();
+
+if (initialRequestedRoute !== initialRoute) {
+  window.location.replace(`#${initialRoute}`);
+} else {
+  showRoute({ skipScroll: true });
+}

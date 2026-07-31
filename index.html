@@ -2,459 +2,271 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <!-- viewport-fit=coverで、iPhoneのホーム画面起動時も画面を広く使いやすくします -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>古着販売 売上登録アプリ</title>
-  <!-- PWAとしてホーム画面に追加するための設定ファイルを読み込みます -->
+  <title>古着売上管理</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#146c5f">
-  <!-- iPhoneのSafariでホーム画面に追加したとき、アプリ風に起動するための設定です -->
+  <meta name="theme-color" content="#ff3b0a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="古着売上管理">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <!-- アイコン画像を用意したら、このファイル名で置くとiPhoneでも使いやすくなります -->
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- ページ全体を中央に配置するための入れ物です -->
-  <main class="app">
-    <!-- アプリの見出しです -->
-    <header class="page-header">
-      <h1>古着販売 売上登録</h1>
-      <p class="lead">販売した商品を登録して、利益と利益率を一覧で確認できます。</p>
+  <!-- 外部通信なしで使える、Lucideをもとにした共通アイコンです -->
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></symbol>
+    <symbol id="icon-plus-square" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-5M12 16V7M17 16V4"/></symbol>
+    <symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></symbol>
+    <symbol id="icon-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
+  </svg>
+
+  <main class="app-shell">
+    <!-- 月入力は全画面で共有し、同じidを複数作らないようにします -->
+    <header class="app-header">
+      <h1 id="routeTitle">古着売上管理</h1>
+      <label class="global-month-control" for="monthFilter">
+        <svg class="ui-icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>
+        <span class="sr-only">表示する月</span>
+        <input id="monthFilter" type="month" required>
+      </label>
     </header>
 
-    <!-- 売上を入力するカードです -->
-    <section class="card sales-form-card" data-section-id="salesForm">
-      <div class="section-header">
-        <h2 id="formTitle">売上を登録</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <p id="editStatus" class="edit-status">編集中です。内容を変更して「更新する」を押してください。</p>
-      <div id="formError" class="form-error" role="alert"></div>
+    <!-- ホーム画面です -->
+    <section id="homeView" class="app-view" data-route="home">
+      <a class="primary-cta" href="#register">
+        <span class="cta-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg></span>
+        売上を登録
+      </a>
 
-      <!-- 入力フォームです。JavaScriptで登録と計算を行います -->
-      <form id="salesForm" class="form" novalidate>
-        <label for="saleDate">
-          販売日
-          <input id="saleDate" class="field" type="date" required>
-        </label>
+      <section class="surface home-summary" aria-labelledby="homeSummaryTitle">
+        <h2 id="homeSummaryTitle" class="sr-only">選択中の月の主要実績</h2>
+        <div class="home-summary-item"><span>売上</span><strong id="homeSales">0円</strong></div>
+        <div class="home-summary-item"><span>利益</span><strong id="homeProfit">0円</strong></div>
+        <div class="home-summary-item"><span>利益率</span><strong id="homeProfitRate">0.0%</strong></div>
+      </section>
 
-        <label for="purchaseDate">
-          仕入日
-          <!-- 任意入力です。入力された場合は販売日との差から販売日数を計算します -->
-          <input id="purchaseDate" class="field" type="date">
-        </label>
+      <div class="home-insight-grid">
+        <section class="surface insight-card speed-card">
+          <h2>販売速度</h2>
+          <div class="speed-primary"><span>販売日数中央値</span><strong id="homeMedianSaleDays">-</strong></div>
+          <dl class="speed-rates">
+            <div><dt>30日以内</dt><dd id="homeWithin30Rate">-</dd></div>
+            <div><dt>90日以内</dt><dd id="homeWithin90Rate">-</dd></div>
+          </dl>
+          <p id="homeSpeedNote">仕入日がある商品を対象に集計します。</p>
+        </section>
 
-        <label for="salesChannel">
-          販路
-          <select id="salesChannel" class="field" required>
-            <option value="メルカリメイン">メルカリメイン</option>
-            <option value="メルカリサブ">メルカリサブ</option>
-            <option value="ヤフー">ヤフー</option>
-            <option value="ラクマ">ラクマ</option>
-          </select>
-        </label>
-
-        <label for="itemName">
-          商品名
-          <input id="itemName" class="field" type="text" placeholder="例: Levi's デニムジャケット" required>
-        </label>
-
-        <label for="itemImage">
-          商品画像
-          <!-- 画像だけを選べるファイル入力です。画像なしでも登録できます -->
-          <input id="itemImage" class="field file-field" type="file" accept="image/*">
-        </label>
-
-        <!-- 画像を選んだときだけ、登録前のプレビューを表示します -->
-        <div id="imagePreviewWrap" class="image-preview-wrap">
-          <img id="imagePreview" class="image-preview" alt="選択した商品画像のプレビュー">
-        </div>
-
-        <!-- 編集中に既存画像を消したいときだけ使うボタンです -->
-        <button id="removeImageButton" class="image-delete-button" type="button">画像を削除</button>
-
-        <label for="salePrice">
-          売値
-          <span class="input-wrap">
-            <input id="salePrice" type="number" min="1" step="1" placeholder="例: 3500" required>
-            <span>円</span>
-          </span>
-        </label>
-
-        <label for="costPrice">
-          仕入れ値
-          <span class="input-wrap">
-            <input id="costPrice" type="number" min="0" step="1" placeholder="例: 1200" required>
-            <span>円</span>
-          </span>
-        </label>
-
-        <label for="shippingFee">
-          送料
-          <span class="input-wrap">
-            <input id="shippingFee" type="number" min="0" step="1" placeholder="例: 750" required>
-            <span>円</span>
-          </span>
-        </label>
-
-        <label for="feeRate">
-          販売手数料率
-          <span class="input-wrap">
-            <input id="feeRate" type="number" min="0" step="0.1" value="10" required>
-            <span>%</span>
-          </span>
-        </label>
-
-        <label for="memo">
-          メモ
-          <textarea id="memo" class="field" rows="3" placeholder="例: 目立つ汚れなし、宅急便コンパクト"></textarea>
-        </label>
-
-        <div class="form-actions">
-          <button id="submitButton" type="submit">登録する</button>
-          <!-- 編集中だけ表示するキャンセルボタンです -->
-          <button id="cancelEditButton" class="cancel-button" type="button">キャンセル</button>
-        </div>
-      </form>
-      </div>
-    </section>
-
-    <!-- 表示する月を選ぶカードです -->
-    <section class="card month-filter-card">
-      <label for="monthFilter">
-        表示する月
-        <input id="monthFilter" class="field" type="month" required>
-      </label>
-    </section>
-
-    <!-- 選択中の月の全体集計を表示するカードです -->
-    <section class="card summary-card" data-section-id="totalSummary">
-      <div class="section-header">
-        <h2>全体集計</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div class="summary-grid">
-        <div class="summary-box">
-          <span>売上合計</span>
-          <strong id="totalSales">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>原価合計</span>
-          <strong id="totalCost">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>送料合計</span>
-          <strong id="totalShipping">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>手数料合計</span>
-          <strong id="totalFee">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>利益合計</span>
-          <strong id="totalProfit">0円</strong>
-        </div>
-        <div class="summary-box">
-          <span>平均利益率</span>
-          <strong id="averageProfitRate">0.0%</strong>
-        </div>
-        <div class="summary-box">
-          <span>登録件数</span>
-          <strong id="summaryCount">0件</strong>
-        </div>
-      </div>
-      </div>
-    </section>
-
-    <!-- 選択中の月の平均値や収益性を確認するKPIカードです -->
-    <section class="card kpi-card" data-section-id="kpiSummary">
-      <div class="section-header">
-        <h2>分析指標</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div class="kpi-grid">
-        <div class="kpi-box">
-          <span>平均売価</span>
-          <strong id="averageSalePrice">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均原価</span>
-          <strong id="averageCostPrice">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均送料</span>
-          <strong id="averageShippingFee">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均手数料</span>
-          <strong id="averageFee">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>手数料率</span>
-          <strong id="kpiFeeRate">0.0%</strong>
-        </div>
-        <div class="kpi-box">
-          <span>送料率</span>
-          <strong id="kpiShippingRate">0.0%</strong>
-        </div>
-        <div class="kpi-box">
-          <span>原価率</span>
-          <strong id="kpiCostRate">0.0%</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均利益</span>
-          <strong id="averageProfit">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均入金額</span>
-          <strong id="averageDeposit">0円</strong>
-        </div>
-        <div class="kpi-box">
-          <span>平均販売日数</span>
-          <strong id="averageSaleDays">-</strong>
-        </div>
-        <div class="kpi-box kpi-highlight">
-          <span>粗利率</span>
-          <strong id="grossProfitRate">0.0%</strong>
-        </div>
-      </div>
-      </div>
-    </section>
-
-    <!-- 選択中の月を1〜7日、8〜14日、15〜21日、22日〜月末で分けた週間レポートです -->
-    <section class="card weekly-report-card" data-section-id="weeklyReport">
-      <div class="section-header">
-        <h2>週間レポート</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <!-- JavaScriptで週ごとのカードをここに追加します -->
-      <div id="weeklyReportList" class="weekly-report-list"></div>
-      </div>
-    </section>
-
-    <!-- 選択中の月で売上がある日だけをまとめる日別売上です -->
-    <section class="card daily-sales-card" data-section-id="dailySales">
-      <div class="section-header">
-        <h2>日別売上</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <!-- JavaScriptで日ごとのカードをここに追加します -->
-      <div id="dailySalesList" class="daily-sales-list"></div>
-      </div>
-    </section>
-
-    <!-- 選択中の月の販路別集計を表示するカードです -->
-    <section class="card channel-summary-card" data-section-id="channelSummary">
-      <div class="section-header">
-        <h2>販路別集計</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div id="channelSummaryList" class="channel-summary-list"></div>
-      </div>
-    </section>
-
-    <!-- AIに貼り付ける分析用テキストを、表示中の月のデータから作ります -->
-    <section class="card ai-analysis-card" data-section-id="aiAnalysis">
-      <div class="section-header">
-        <h2>AI分析用コピー</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div class="ai-options">
-        <label>
-          <input id="includeAiItemDetails" type="checkbox" checked>
-          商品明細を含める
-        </label>
-        <label>
-          <input id="includeAiMemos" type="checkbox" checked>
-          メモを含める
-        </label>
+        <section class="surface recent-card">
+          <div class="card-title-row">
+            <h2>最近の売上</h2>
+            <a href="#data/list">すべて見る <svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow"></use></svg></a>
+          </div>
+          <div id="homeRecentSales" class="recent-sales-list"></div>
+        </section>
       </div>
 
-      <div class="ai-actions">
-        <button id="copyAiAnalysisButton" type="button">表示中の月をAI分析用にコピー</button>
-        <button id="refreshAiPreviewButton" class="secondary-button" type="button">プレビュー更新</button>
-      </div>
-
-      <p id="aiCopyStatus" class="ai-copy-status" role="status"></p>
-
-      <label for="aiAnalysisPreview">
-        コピーされる内容
-        <textarea id="aiAnalysisPreview" class="field ai-analysis-preview" rows="16" readonly></textarea>
-      </label>
-      </div>
-    </section>
-
-    <!-- 登録済みデータを月ごとにまとめたサマリーです -->
-    <section class="card monthly-summary-card" data-section-id="monthlySummary">
-      <div class="section-header">
-        <h2>月別サマリー</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <label for="summaryYearSelect" class="summary-year-control">
-        年度
-        <select id="summaryYearSelect" class="field"></select>
-      </label>
-
-      <!-- JavaScriptで月別サマリーカードをここに追加します -->
-      <div id="monthlySummaryList" class="monthly-summary-list"></div>
-      </div>
-    </section>
-
-    <!-- 一覧の検索・絞り込み・並び替えを行う表示設定です -->
-    <section class="card filter-card" data-section-id="filters">
-      <div class="section-header">
-        <h2>表示設定</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-      <div class="section-content">
-      <div class="filter-grid">
-        <label for="searchInput">
-          商品名・メモ検索
-          <input id="searchInput" class="field" type="search" placeholder="キーワードを入力">
-        </label>
-
-        <label for="channelFilter">
-          販路で絞り込み
-          <select id="channelFilter" class="field">
-            <option value="all">すべて</option>
-            <option value="メルカリメイン">メルカリメイン</option>
-            <option value="メルカリサブ">メルカリサブ</option>
-            <option value="ヤフー">ヤフー</option>
-            <option value="ラクマ">ラクマ</option>
-          </select>
-        </label>
-
-        <label for="sortSelect">
-          並び替え
-          <select id="sortSelect" class="field">
-            <option value="dateDesc">販売日が新しい順</option>
-            <option value="dateAsc">販売日が古い順</option>
-            <option value="priceDesc">売値が高い順</option>
-            <option value="profitDesc">利益が高い順</option>
-            <option value="profitRateDesc">利益率が高い順</option>
-          </select>
-        </label>
-      </div>
-      </div>
-    </section>
-
-    <!-- バックアップとCSVの出力・読み込みを行う管理メニューです -->
-    <section class="card csv-card" data-section-id="csv">
-      <div class="section-header">
-        <h2>データ管理</h2>
-        <button class="section-toggle" type="button">− しまう</button>
-      </div>
-
-      <div class="section-content">
-      <!-- データ操作の結果や注意点を、色だけでなく文章でも伝えます -->
-      <div id="dataManagementStatus" class="data-management-status" role="status" aria-live="polite">
-        保存データを確認しています。
-      </div>
-
-      <div class="backup-panel">
-        <div>
-          <h3>完全バックアップ</h3>
-          <p>商品画像と折りたたみ設定を含むJSONファイルを保存します。CSVで置き換える前の保存をおすすめします。</p>
-        </div>
-        <button id="exportJsonBackupButton" type="button">JSON完全バックアップ</button>
-        <label for="jsonBackupInput">
-          JSONバックアップを復元
-          <input id="jsonBackupInput" class="field file-field" type="file" accept=".json,application/json">
-        </label>
-      </div>
-
-      <div class="csv-actions">
-        <button id="exportCsvButton" type="button">全データCSV出力</button>
-        <button id="exportMonthCsvButton" class="secondary-button" type="button">表示中の月をCSV出力</button>
-
-        <div class="csv-import-box">
+      <section class="surface sales-trend-card">
+        <div class="card-title-row">
           <div>
-            <h3>CSV読み込み</h3>
-            <p>ファイルを選ぶと、保存前に内容を検証して結果を表示します。</p>
+            <h2>売上推移</h2>
+            <p id="homeTrendPeriod">選択中の月の日次売上</p>
           </div>
+          <strong id="homeTrendTotal">0円</strong>
+        </div>
+        <div id="homeSalesChart" class="sales-chart" role="img" aria-label="日ごとの売上棒グラフ"></div>
+      </section>
+    </section>
 
-          <label for="csvFileInput">
-            CSVファイル
-            <input id="csvFileInput" class="field file-field" type="file" accept=".csv,text/csv">
+    <!-- 売上登録・編集画面です。既存の入力idを保って機能を引き継ぎます -->
+    <section id="registerView" class="app-view" data-route="register" hidden>
+      <section class="form-screen">
+        <div class="form-screen-heading">
+          <div>
+            <h2 id="formTitle">売上を登録</h2>
+            <p>販売情報を入力すると、手数料と利益を自動計算します。</p>
+          </div>
+        </div>
+        <p id="editStatus" class="edit-status">登録済みの売上を編集中です。更新すると元のデータへ上書きします。</p>
+        <div id="formError" class="form-error" role="alert"></div>
+
+        <form id="salesForm" class="form new-sales-form" novalidate>
+          <label class="form-row" for="saleDate"><span>販売日 <em>必須</em></span><input id="saleDate" type="date" required></label>
+          <label class="form-row" for="purchaseDate"><span>仕入日 <small>任意</small></span><input id="purchaseDate" type="date"></label>
+          <label class="form-row" for="salesChannel">
+            <span>販路 <em>必須</em></span>
+            <select id="salesChannel" required>
+              <option value="メルカリメイン">メルカリメイン</option>
+              <option value="メルカリサブ">メルカリサブ</option>
+              <option value="ヤフー">ヤフー</option>
+              <option value="ラクマ">ラクマ</option>
+            </select>
           </label>
+          <label class="form-row" for="itemName"><span>商品名 <em>必須</em></span><input id="itemName" type="text" placeholder="例: Levi's 501 デニム" required></label>
 
-          <!-- 読み込み時に、今のデータへ追加するか置き換えるかを選びます -->
-          <div class="import-mode">
-            <label>
-              <input type="radio" name="importMode" value="append" checked>
-              現在のデータに追加する
-            </label>
-            <label>
-              <input type="radio" name="importMode" value="replace">
-              現在のデータを置き換える
-            </label>
-          </div>
-
-          <!-- CSVは選択しただけでは保存せず、検証結果を確認してから確定します -->
-          <div id="csvImportPreview" class="csv-import-preview" hidden>
-            <h4>読み込み前の確認</h4>
-            <dl class="csv-preview-summary">
-              <div><dt>読み込み方法</dt><dd id="csvPreviewMode">追加</dd></div>
-              <div><dt>正常</dt><dd id="csvValidCount">0件</dd></div>
-              <div><dt>警告</dt><dd id="csvWarningCount">0件</dd></div>
-              <div><dt>除外</dt><dd id="csvInvalidCount">0件</dd></div>
-              <div><dt>確定後</dt><dd id="csvResultCount">0件</dd></div>
-            </dl>
-            <p id="csvReplaceWarning" class="data-warning" hidden>
-              CSV置換では既存の商品画像がすべて失われます。先にJSON完全バックアップを保存してください。
-            </p>
-            <ul id="csvIssueList" class="csv-issue-list"></ul>
-            <div class="csv-confirm-actions">
-              <button id="confirmCsvImportButton" type="button">検証済みデータを読み込む</button>
-              <button id="cancelCsvImportButton" class="secondary-button" type="button">キャンセル</button>
+          <div class="form-row image-form-row">
+            <span>商品画像 <small>任意</small></span>
+            <div class="image-input-area">
+              <div id="imagePreviewWrap" class="image-preview-wrap"><img id="imagePreview" class="image-preview" alt="選択した商品画像のプレビュー"></div>
+              <label class="image-picker" for="itemImage">
+                <svg class="ui-icon" aria-hidden="true"><use href="#icon-image"></use></svg>
+                <span>画像を選ぶ</span>
+                <input id="itemImage" class="file-field" type="file" accept="image/*">
+              </label>
+              <button id="removeImageButton" class="image-delete-button" type="button">画像を削除</button>
             </div>
           </div>
-        </div>
 
-        <!-- テストデータをまとめて消すための危険操作です。JavaScriptで2回確認します -->
-        <button id="deleteAllDataButton" class="danger-button" type="button">全データ削除</button>
-      </div>
-      </div>
+          <label class="form-row" for="salePrice"><span>売値 <em>必須</em></span><span class="input-wrap"><input id="salePrice" type="number" min="1" step="1" placeholder="9800" required><span>円</span></span></label>
+          <label class="form-row" for="costPrice"><span>仕入れ値 <small>任意</small></span><span class="input-wrap"><input id="costPrice" type="number" min="0" step="1" placeholder="2380" required><span>円</span></span></label>
+          <label class="form-row" for="shippingFee"><span>送料 <small>任意</small></span><span class="input-wrap"><input id="shippingFee" type="number" min="0" step="1" placeholder="210" required><span>円</span></span></label>
+          <label class="form-row" for="feeRate"><span>販売手数料率 <small>任意</small></span><span class="input-wrap"><input id="feeRate" type="number" min="0" step="0.1" value="10" required><span>%</span></span></label>
+          <label class="form-row memo-row" for="memo"><span>メモ <small>任意</small></span><textarea id="memo" rows="4" maxlength="200" placeholder="商品の状態や販売時の補足"></textarea></label>
+
+          <div class="form-actions">
+            <button id="cancelEditButton" class="secondary-button cancel-button" type="button">キャンセル</button>
+            <button id="submitButton" type="submit">登録する</button>
+          </div>
+        </form>
+      </section>
     </section>
 
-    <!-- 登録済みの商品を表示するカードです -->
-    <section class="card" data-section-id="salesList">
-      <div class="section-header">
-        <h2>登録済み一覧</h2>
-        <div class="section-header-actions">
-          <span id="itemCount">0件</span>
-          <button class="section-toggle" type="button">− しまう</button>
+    <!-- 分析概要画面です -->
+    <section id="analysisOverviewView" class="app-view" data-route="analysis/overview" hidden>
+      <nav class="analysis-tabs" aria-label="分析画面">
+        <a class="active" href="#analysis/overview">概要</a>
+        <a href="#analysis/weekly">週間</a>
+        <a href="#analysis/daily">日別</a>
+        <a href="#analysis/channel">販路別</a>
+        <a href="#analysis/monthly">月別</a>
+      </nav>
+
+      <section class="surface analysis-total-card">
+        <h2>全体集計</h2>
+        <dl class="analysis-total-list">
+          <div><dt>売上</dt><dd id="totalSales">0円</dd></div>
+          <div><dt>原価</dt><dd id="totalCost">0円</dd></div>
+          <div><dt>送料</dt><dd id="totalShipping">0円</dd></div>
+          <div><dt>手数料</dt><dd id="totalFee">0円</dd></div>
+          <div class="profit-row"><dt>利益</dt><dd id="totalProfit">0円</dd></div>
+          <div><dt>平均利益率</dt><dd id="averageProfitRate">0.0%</dd></div>
+          <div><dt>登録件数</dt><dd id="summaryCount">0件</dd></div>
+        </dl>
+      </section>
+
+      <section class="analysis-kpi-section">
+        <h2>分析指標</h2>
+        <div class="analysis-kpi-grid">
+          <article><span>平均売価</span><strong id="averageSalePrice">0円</strong></article>
+          <article><span>平均利益</span><strong id="averageProfit">0円</strong></article>
+          <article><span>平均入金額</span><strong id="averageDeposit">0円</strong></article>
+          <article><span>原価率</span><strong id="kpiCostRate">0.0%</strong></article>
+          <article><span>送料率</span><strong id="kpiShippingRate">0.0%</strong></article>
+          <article><span>手数料率</span><strong id="kpiFeeRate">0.0%</strong></article>
+          <article class="kpi-profit"><span>粗利率</span><strong id="grossProfitRate">0.0%</strong></article>
+          <article><span>平均販売日数</span><strong id="averageSaleDays">-</strong></article>
+          <article><span>平均原価</span><strong id="averageCostPrice">0円</strong></article>
+          <article><span>平均送料</span><strong id="averageShippingFee">0円</strong></article>
+          <article><span>平均手数料</span><strong id="averageFee">0円</strong></article>
         </div>
-      </div>
+      </section>
+    </section>
 
-      <div class="section-content">
-      <!-- JavaScriptで商品カードをここに追加します -->
-      <div id="salesList" class="sales-list"></div>
+    <!-- 第2段階以降も既存機能を使えるよう、分析セクションを暫定画面に残します -->
+    <section id="legacyAnalysisView" class="app-view legacy-view" data-routes="analysis/weekly analysis/daily analysis/channel analysis/monthly" hidden>
+      <nav class="analysis-tabs" aria-label="分析画面">
+        <a href="#analysis/overview">概要</a><a href="#analysis/weekly">週間</a><a href="#analysis/daily">日別</a><a href="#analysis/channel">販路別</a><a href="#analysis/monthly">月別</a>
+      </nav>
+      <section id="weeklySection" class="surface legacy-section"><h2>週間レポート</h2><div id="weeklyReportList" class="weekly-report-list"></div></section>
+      <section id="dailySection" class="surface legacy-section"><h2>日別売上</h2><div id="dailySalesList" class="daily-sales-list"></div></section>
+      <section id="channelSection" class="surface legacy-section"><h2>販路別集計</h2><div id="channelSummaryList" class="channel-summary-list"></div></section>
+      <section id="monthlySection" class="surface legacy-section">
+        <h2>月別サマリー</h2>
+        <label class="summary-year-control" for="summaryYearSelect">年度<select id="summaryYearSelect"></select></label>
+        <div id="monthlySummaryList" class="monthly-summary-list"></div>
+      </section>
+    </section>
 
-      <!-- 登録データがないときだけ表示します -->
-      <p id="emptyMessage" class="empty-message">選択中の月に登録された商品はありません。</p>
-      </div>
+    <!-- データタブは第3・4段階まで既存機能をまとめて利用できる暫定画面です -->
+    <section id="dataView" class="app-view legacy-view" data-route="data/list" hidden>
+      <section class="surface legacy-section">
+        <h2>AI分析用コピー</h2>
+        <div class="ai-options">
+          <label><input id="includeAiItemDetails" type="checkbox" checked> 商品明細を含める</label>
+          <label><input id="includeAiMemos" type="checkbox" checked> メモを含める</label>
+        </div>
+        <div class="ai-actions">
+          <button id="copyAiAnalysisButton" type="button">表示中の月をコピー</button>
+          <button id="refreshAiPreviewButton" class="secondary-button" type="button">プレビュー更新</button>
+        </div>
+        <p id="aiCopyStatus" class="ai-copy-status" role="status"></p>
+        <label for="aiAnalysisPreview">コピーされる内容<textarea id="aiAnalysisPreview" rows="12" readonly></textarea></label>
+      </section>
+
+      <section class="surface legacy-section">
+        <div class="card-title-row"><h2>登録済み一覧</h2><span id="itemCount">0件</span></div>
+        <div class="filter-grid">
+          <label for="searchInput">商品名・メモ検索<input id="searchInput" type="search" placeholder="キーワードを入力"></label>
+          <label for="channelFilter">販路<select id="channelFilter"><option value="all">すべて</option><option value="メルカリメイン">メルカリメイン</option><option value="メルカリサブ">メルカリサブ</option><option value="ヤフー">ヤフー</option><option value="ラクマ">ラクマ</option></select></label>
+          <label for="sortSelect">並び替え<select id="sortSelect"><option value="dateDesc">販売日が新しい順</option><option value="dateAsc">販売日が古い順</option><option value="priceDesc">売値が高い順</option><option value="profitDesc">利益が高い順</option><option value="profitRateDesc">利益率が高い順</option></select></label>
+        </div>
+        <div id="salesList" class="sales-list"></div>
+        <p id="emptyMessage" class="empty-message">選択中の月に登録された商品はありません。</p>
+      </section>
+
+      <section class="surface legacy-section">
+        <h2>データ管理</h2>
+        <div id="dataManagementStatus" class="data-management-status" role="status" aria-live="polite">保存データを確認しています。</div>
+        <div class="backup-panel">
+          <h3>完全バックアップ</h3>
+          <p>商品画像と設定を含むJSONファイルを保存します。</p>
+          <button id="exportJsonBackupButton" type="button">JSON完全バックアップ</button>
+          <label for="jsonBackupInput">JSONバックアップを復元<input id="jsonBackupInput" class="file-field" type="file" accept=".json,application/json"></label>
+        </div>
+        <div class="csv-actions">
+          <button id="exportCsvButton" type="button">全データCSV出力</button>
+          <button id="exportMonthCsvButton" class="secondary-button" type="button">表示中の月をCSV出力</button>
+          <div class="csv-import-box">
+            <h3>CSV読み込み</h3>
+            <label for="csvFileInput">CSVファイル<input id="csvFileInput" class="file-field" type="file" accept=".csv,text/csv"></label>
+            <div class="import-mode">
+              <label><input type="radio" name="importMode" value="append" checked> 現在のデータに追加する</label>
+              <label><input type="radio" name="importMode" value="replace"> 現在のデータを置き換える</label>
+            </div>
+            <div id="csvImportPreview" class="csv-import-preview" hidden>
+              <h4>読み込み前の確認</h4>
+              <dl class="csv-preview-summary">
+                <div><dt>読み込み方法</dt><dd id="csvPreviewMode">追加</dd></div><div><dt>正常</dt><dd id="csvValidCount">0件</dd></div>
+                <div><dt>警告</dt><dd id="csvWarningCount">0件</dd></div><div><dt>除外</dt><dd id="csvInvalidCount">0件</dd></div><div><dt>確定後</dt><dd id="csvResultCount">0件</dd></div>
+              </dl>
+              <p id="csvReplaceWarning" class="data-warning" hidden>CSV置換では既存の商品画像がすべて失われます。</p>
+              <ul id="csvIssueList" class="csv-issue-list"></ul>
+              <div class="csv-confirm-actions"><button id="confirmCsvImportButton" type="button">検証済みデータを読み込む</button><button id="cancelCsvImportButton" class="secondary-button" type="button">キャンセル</button></div>
+            </div>
+          </div>
+          <button id="deleteAllDataButton" class="danger-button" type="button">全データ削除</button>
+        </div>
+      </section>
     </section>
   </main>
 
+  <nav class="bottom-nav" aria-label="メインメニュー">
+    <a href="#home" data-nav-group="home"><svg class="ui-icon" aria-hidden="true"><use href="#icon-home"></use></svg><span>ホーム</span></a>
+    <a href="#register" data-nav-group="register"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus-square"></use></svg><span>登録</span></a>
+    <a href="#analysis/overview" data-nav-group="analysis"><svg class="ui-icon" aria-hidden="true"><use href="#icon-chart"></use></svg><span>分析</span></a>
+    <a href="#data/list" data-nav-group="data"><svg class="ui-icon" aria-hidden="true"><use href="#icon-table"></use></svg><span>データ</span></a>
+  </nav>
+
   <script src="script.js"></script>
   <script>
-    // Service Workerに対応しているブラウザだけ、オフライン用のキャッシュ処理を登録します
+    // Service Workerの登録に失敗しても、アプリ本体はそのまま利用できます
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
         navigator.serviceWorker.register("./service-worker.js").catch(function (error) {
-          // 登録に失敗しても、アプリ本体は通常通り使えるようにします
           console.warn("Service Workerを登録できませんでした。", error);
         });
       });
