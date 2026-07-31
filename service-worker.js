@@ -1,7 +1,7 @@
 // キャッシュ名を変えると、古いキャッシュを削除して新しいファイルを使いやすくなります。
-// HTML/CSS/JSを大きく変更したのに反映されないときは、この v9 を v10 のように増やしてください。
+// HTML/CSS/JSを大きく変更したのに反映されないときは、末尾の番号を1つ増やしてください。
 const CACHE_PREFIX = "used-clothes-sales-";
-const CACHE_NAME = "used-clothes-sales-v9";
+const CACHE_NAME = "used-clothes-sales-v10";
 
 // オフラインでも最低限アプリ画面を開けるように、基本ファイルだけ保存します。
 // 画像やCSVは容量が大きくなりやすいので、ここではキャッシュしません。
@@ -10,7 +10,10 @@ const APP_FILES = [
   "./index.html",
   "./style.css",
   "./script.js",
-  "./manifest.json"
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./favicon.png"
 ];
 
 // Service Workerがインストールされたときに、基本ファイルをキャッシュします。

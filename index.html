@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>古着売上管理</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#ff3b0a">
+  <meta name="theme-color" content="#FF3B0A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="古着売上管理">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -23,6 +24,11 @@
     <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="icon-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v3h16v-3"/></symbol>
+    <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 17v3h16v-3"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5"/></symbol>
   </svg>
 
   <main class="app-shell">
@@ -297,64 +303,112 @@
       <p id="emptyMessage" class="empty-message">選択中の月に登録された商品はありません。</p>
     </section>
 
-    <!-- 第4段階まで商品詳細への入口を安全に受け止める暫定画面です -->
-    <section id="salePlaceholderView" class="app-view sale-placeholder-view" data-route-pattern="data/sale/" hidden>
+    <!-- 一覧から選んだ1件の収支と日付を確認する商品詳細画面です -->
+    <section id="salePlaceholderView" class="app-view sale-detail-view" data-route-pattern="data/sale/" hidden>
       <a class="back-link" href="#data/list">売上データ一覧へ戻る</a>
-      <section class="surface sale-placeholder-card">
-        <div id="placeholderSaleImage" class="placeholder-sale-image">画像なし</div>
-        <div>
-          <p id="placeholderSaleMeta" class="placeholder-sale-meta"></p>
+      <div id="saleDetailMissing" class="surface sale-detail-missing" hidden>
+        <h2>商品が見つかりません</h2>
+        <p>削除済み、またはURLが正しくない可能性があります。</p>
+      </div>
+      <div id="saleDetailContent">
+        <section class="surface sale-detail-hero">
+          <div id="placeholderSaleImage" class="sale-detail-image">画像なし</div>
+          <div class="sale-detail-main">
+            <span class="sale-status-badge">販売済み</span>
+            <p id="placeholderSaleMeta" class="sale-detail-meta"></p>
           <h2 id="placeholderSaleName">商品を確認しています</h2>
-          <dl class="placeholder-sale-values">
+            <dl class="sale-detail-values">
             <div><dt>売値</dt><dd id="placeholderSalePrice">0円</dd></div>
             <div><dt>利益</dt><dd id="placeholderSaleProfit">0円</dd></div>
             <div><dt>利益率</dt><dd id="placeholderSaleProfitRate">0.0%</dd></div>
           </dl>
-          <p class="placeholder-notice">商品詳細画面は第4段階で完成します。編集と削除は現在も利用できます。</p>
-          <div class="placeholder-actions">
-            <button id="placeholderEditButton" type="button">編集する</button>
-            <button id="placeholderDeleteButton" class="danger-button" type="button">削除する</button>
           </div>
+        </section>
+        <section class="surface sale-detail-info">
+          <dl>
+            <div><dt>販売日</dt><dd id="detailSaleDate">-</dd></div>
+            <div><dt>仕入日</dt><dd id="detailPurchaseDate">-</dd></div>
+            <div><dt>販売日数</dt><dd id="detailSaleDays">-</dd></div>
+            <div><dt>販路</dt><dd id="detailSalesChannel">-</dd></div>
+            <div><dt>原価</dt><dd id="detailCostPrice">0円</dd></div>
+            <div><dt>送料</dt><dd id="detailShippingFee">0円</dd></div>
+            <div><dt>手数料</dt><dd id="detailFee">0円</dd></div>
+            <div><dt>販売手数料率</dt><dd id="detailFeeRate">0.0%</dd></div>
+          </dl>
+        </section>
+        <section class="surface sale-detail-memo">
+          <h2>メモ</h2>
+          <p id="detailMemo">メモなし</p>
+        </section>
+        <div class="sale-detail-actions">
+          <button id="placeholderEditButton" class="detail-edit-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg>編集する</button>
+          <button id="placeholderDeleteButton" class="detail-delete-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg>削除する</button>
         </div>
-      </section>
+      </div>
     </section>
 
-    <!-- CSVとJSONは第4段階まで、安全機能を維持した暫定管理画面で提供します -->
-    <section id="dataManageView" class="app-view legacy-view" data-route="data/manage" hidden>
+    <!-- JSON完全バックアップとCSV入出力をまとめたデータ管理画面です -->
+    <section id="dataManageView" class="app-view data-manage-view" data-route="data/manage" hidden>
       <a class="back-link" href="#data/list">売上データ一覧へ戻る</a>
-      <section class="surface legacy-section">
-        <h2>データ管理</h2>
-        <div id="dataManagementStatus" class="data-management-status" role="status" aria-live="polite">保存データを確認しています。</div>
-        <div class="backup-panel">
-          <h3>完全バックアップ</h3>
+      <p class="screen-description">バックアップとCSV</p>
+      <div id="dataManagementStatus" class="data-management-status" role="status" aria-live="polite">保存データを確認しています。</div>
+      <section class="surface data-manage-card">
+        <h2>JSON完全バックアップ</h2>
           <p>商品画像と設定を含むJSONファイルを保存します。</p>
-          <button id="exportJsonBackupButton" type="button">JSON完全バックアップ</button>
-          <label for="jsonBackupInput">JSONバックアップを復元<input id="jsonBackupInput" class="file-field" type="file" accept=".json,application/json"></label>
+        <button id="exportJsonBackupButton" class="manage-primary-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-upload"></use></svg>バックアップを作成</button>
+        <label class="manage-file-button" for="jsonBackupInput"><svg class="ui-icon" aria-hidden="true"><use href="#icon-download"></use></svg>バックアップから復元<input id="jsonBackupInput" class="file-field" type="file" accept=".json,application/json"></label>
+      </section>
+      <section class="surface data-manage-card">
+        <h2>CSV管理</h2>
+        <p>CSVでは画像以外の売上データを入出力できます。</p>
+        <h3>CSV出力</h3>
+        <div class="manage-action-stack">
+          <button id="exportCsvButton" class="manage-outline-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-file"></use></svg>全データCSV出力</button>
+          <button id="exportMonthCsvButton" class="manage-outline-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-calendar"></use></svg><span id="monthCsvButtonLabel">表示中の月をCSV出力</span></button>
         </div>
-        <div class="csv-actions">
-          <button id="exportCsvButton" type="button">全データCSV出力</button>
-          <button id="exportMonthCsvButton" class="secondary-button" type="button">表示中の月をCSV出力</button>
-          <div class="csv-import-box">
-            <h3>CSV読み込み</h3>
-            <label for="csvFileInput">CSVファイル<input id="csvFileInput" class="file-field" type="file" accept=".csv,text/csv"></label>
-            <div class="import-mode">
-              <label><input type="radio" name="importMode" value="append" checked> 現在のデータに追加する</label>
-              <label><input type="radio" name="importMode" value="replace"> 現在のデータを置き換える</label>
-            </div>
-            <div id="csvImportPreview" class="csv-import-preview" hidden>
-              <h4>読み込み前の確認</h4>
-              <dl class="csv-preview-summary">
-                <div><dt>読み込み方法</dt><dd id="csvPreviewMode">追加</dd></div><div><dt>正常</dt><dd id="csvValidCount">0件</dd></div>
-                <div><dt>警告</dt><dd id="csvWarningCount">0件</dd></div><div><dt>除外</dt><dd id="csvInvalidCount">0件</dd></div><div><dt>確定後</dt><dd id="csvResultCount">0件</dd></div>
-              </dl>
-              <p id="csvReplaceWarning" class="data-warning" hidden>CSV置換では既存の商品画像がすべて失われます。</p>
-              <ul id="csvIssueList" class="csv-issue-list"></ul>
-              <div class="csv-confirm-actions"><button id="confirmCsvImportButton" type="button">検証済みデータを読み込む</button><button id="cancelCsvImportButton" class="secondary-button" type="button">キャンセル</button></div>
-            </div>
-          </div>
-          <button id="deleteAllDataButton" class="danger-button" type="button">全データ削除</button>
+        <h3>CSVインポート</h3>
+        <div class="import-mode manage-import-mode" role="radiogroup" aria-label="CSV読み込み方法">
+          <label><input type="radio" name="importMode" value="append" checked><span><strong>追加</strong><small>既存データに追加</small></span></label>
+          <label><input type="radio" name="importMode" value="replace"><span><strong>置き換え</strong><small>既存データを削除して置き換え</small></span></label>
+        </div>
+        <label class="manage-file-button" for="csvFileInput"><svg class="ui-icon" aria-hidden="true"><use href="#icon-upload"></use></svg>CSVを選択<input id="csvFileInput" class="file-field" type="file" accept=".csv,text/csv"></label>
+        <p class="manage-format-note">対応形式：UTF-8（カンマ区切りCSV）</p>
+      </section>
+      <section class="data-delete-panel">
+        <div><h2><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg>全データ削除</h2><p>登録済みの売上データを削除します。この操作は元に戻せません。</p></div>
+        <button id="deleteAllDataButton" class="danger-button" type="button">削除を実行</button>
+      </section>
+      <p class="manage-info-note">商品画像はJSON完全バックアップに含まれます。</p>
+    </section>
+
+    <!-- CSVとJSONを保存へ反映する前に、内容を確認する共通画面です -->
+    <section id="importReviewView" class="app-view import-review-view" data-route="data/import-review" hidden>
+      <a id="importReviewBackLink" class="back-link" href="#data/manage">データ管理へ戻る</a>
+      <section class="surface import-review-summary">
+        <div class="import-file-heading"><svg class="ui-icon" aria-hidden="true"><use href="#icon-file"></use></svg><div><h2 id="importReviewFileName">読み込みファイル</h2><p>読み込み方法：<strong id="importReviewMode">追加</strong></p></div></div>
+        <div id="csvImportPreview" class="csv-import-preview">
+          <dl class="csv-preview-summary">
+            <div><dt>正常</dt><dd id="csvValidCount">0件</dd></div><div><dt>警告</dt><dd id="csvWarningCount">0件</dd></div>
+            <div><dt>除外</dt><dd id="csvInvalidCount">0件</dd></div><div><dt>読み込み後</dt><dd id="csvResultCount">0件</dd></div>
+          </dl>
+          <span id="csvPreviewMode" class="sr-only">追加</span>
         </div>
       </section>
+      <section id="csvReviewPanel" class="surface import-issues-card">
+        <h2>警告・除外一覧 <span id="importIssueCount">0件</span></h2>
+        <p id="csvNoIssues" class="empty-inline">警告や除外はありません。</p>
+        <ul id="csvIssueList" class="csv-issue-list"></ul>
+        <p id="csvReplaceWarning" class="import-warning" hidden>現在のデータを置き換えます。CSVには画像が含まれないため、既存画像は失われます。</p>
+      </section>
+      <section id="jsonReviewPanel" class="surface json-review-card" hidden>
+        <h2>JSON復元時の確認</h2>
+        <dl><div><dt>バックアップ日時</dt><dd id="jsonReviewCreatedAt">-</dd></div><div><dt>データ件数</dt><dd id="jsonReviewCount">0件</dd></div><div><dt>画像あり件数</dt><dd id="jsonReviewImageCount">0件</dd></div></dl>
+        <p class="import-warning">現在の売上データと設定を、このバックアップの内容で置き換えます。</p>
+      </section>
+      <div class="import-review-actions">
+        <button id="confirmCsvImportButton" type="button">確認して読み込む</button>
+        <button id="cancelCsvImportButton" class="secondary-button" type="button">キャンセル</button>
+      </div>
     </section>
   </main>
 
