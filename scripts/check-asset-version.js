@@ -27,8 +27,8 @@ if (!html.includes(`service-worker.js?v=${assetVersion}`)) {
   throw new Error("Service Worker登録URLの資産版が一致していません。");
 }
 
-if (!worker.includes('const CACHE_NAME = "used-clothes-sales-v13"')) {
-  throw new Error("Service Workerのキャッシュ名がv13ではありません。");
+if (!worker.includes('const CACHE_NAME = "used-clothes-sales-v14"')) {
+  throw new Error("Service Workerのキャッシュ名がv14ではありません。");
 }
 
 process.stdout.write(`資産版${assetVersion}の同期を確認しました。\n`);

@@ -159,18 +159,20 @@ test("破壊操作はバックアップ保存確認をキャンセルすると�
 });
 
 test("将来バージョンの保存データは読取専用で開き、形式を下げない", async function ({ page }) {
+  const rawSale = {
+    id: "future-sale",
+    saleDate: "2026-08-01", purchaseDate: "", salesChannel: "ヤフー",
+    itemName: "将来版商品", salePrice: 9999, costPrice: 2000, shippingFee: 210,
+    feeRate: 10, fee: 1234.567, profit: "将来版の利益原文", profitRate: 12.345,
+    futureField: { text: "一字一句そのまま", nested: [1, "02", false] }
+  };
+  const rawMeta = {
+    schemaVersion: 99, revision: 8, futureMeta: { text: "メタ情報もそのまま" }
+  };
   await page.evaluate(function () {
-    const month = new Date().toISOString().slice(0, 7);
-    localStorage.setItem("usedClothesSales", JSON.stringify([{
-      id: "future-sale",
-      saleDate: `${month}-01`, purchaseDate: "", salesChannel: "ヤフー",
-      itemName: "将来版商品", salePrice: 9999, costPrice: 2000, shippingFee: 210,
-      feeRate: 10, fee: 999, profit: 6790, profitRate: 67.9, futureField: "keep"
-    }]));
-    localStorage.setItem("usedClothesAppMeta", JSON.stringify({
-      schemaVersion: 99, revision: 8, futureMeta: "keep"
-    }));
-  });
+    localStorage.setItem("usedClothesSales", JSON.stringify(arguments[0].sales));
+    localStorage.setItem("usedClothesAppMeta", JSON.stringify(arguments[0].meta));
+  }, { sales: [rawSale], meta: rawMeta });
   await page.reload();
 
   await expect(page.locator("#globalStatus")).toContainText("閲覧と書き出しのみ");
@@ -187,8 +189,19 @@ test("将来バージョンの保存データは読取専用で開き、形式�
     };
   });
   expect(stored.meta.schemaVersion).toBe(99);
-  expect(stored.meta.futureMeta).toBe("keep");
-  expect(stored.sales[0].futureField).toBe("keep");
+  expect(stored.meta.futureMeta).toEqual(rawMeta.futureMeta);
+  expect(stored.sales[0].futureField).toEqual(rawSale.futureField);
+
+  // 画面用の再計算値ではなく、localStorageから読んだ将来版の原文が完全バックアップへ出ることを確認します。
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#exportJsonBackupButton").click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const backup = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  expect(backup.sales).toEqual([rawSale]);
+  expect(backup.appMeta).toEqual(rawMeta);
 });
 
 test("起動時の異常な任意数値は隔離し、元文と回復ログを保持する", async function ({ page }) {

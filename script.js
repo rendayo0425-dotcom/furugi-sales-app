@@ -185,6 +185,8 @@ let storageLoadBlocked = false;
 let storageWriteBlocked = false;
 // このアプリより新しい保存形式は表示だけ行い、古い形式で上書きしないようにします
 let futureSchemaReadOnly = false;
+// 将来版は画面表示用に正規化しても、完全バックアップでは読み込んだ原文をそのまま使います。
+let futureSchemaRawState = null;
 let appMeta = null;
 let currentRevision = 0;
 let formSubmitInProgress = false;
@@ -2013,6 +2015,7 @@ async function commitSales(nextSalesOrFactory, successMessage, options = {}) {
 
 // localStorageから登録済みデータを検証し、v1だけ安全にv2へ移行します。
 async function loadSales() {
+  futureSchemaRawState = null;
   if (!storageAvailable) {
     storageLoadBlocked = true;
     exportJsonBackupButton.disabled = true;
@@ -2048,6 +2051,10 @@ async function loadSales() {
 
   // 将来版は内容を表示できますが、この旧版から保存して形式を下げることはしません。
   if (sourceMeta.schemaVersion > APP_SCHEMA_VERSION) {
+    futureSchemaRawState = {
+      sales: rawSales,
+      appMeta: storedState.meta
+    };
     const partitioned = normalizeValidSalesRecords(rawSales);
     sales = partitioned.sales;
     quarantinedSales = partitioned.quarantinedRecords;
@@ -2122,6 +2129,18 @@ function downloadTextFile(text, fileName, mimeType) {
 
 // 商品画像と設定を含む、アプリ全体の完全バックアップを作ります
 function buildJsonBackup() {
+  // 将来版の計算値や未知項目を旧版の規則で書き換えないよう、生データを優先します。
+  if (futureSchemaReadOnly && futureSchemaRawState) {
+    return UsedClothesCore.buildBackupPayload({
+      backupVersion: BACKUP_VERSION,
+      createdAt: new Date().toISOString(),
+      appMeta: futureSchemaRawState.appMeta,
+      sales: futureSchemaRawState.sales,
+      quarantinedSales: [],
+      collapsedSections
+    });
+  }
+
   return UsedClothesCore.buildBackupPayload({
     backupVersion: BACKUP_VERSION,
     createdAt: new Date().toISOString(),
@@ -3692,9 +3711,16 @@ window.addEventListener("storage", function (event) {
     delete appMeta.targetSchemaVersion;
     currentRevision = appMeta.revision;
     if (appMeta.schemaVersion > APP_SCHEMA_VERSION) {
+      futureSchemaRawState = {
+        sales: latest.sales,
+        appMeta: latest.meta
+      };
       activateFutureSchemaReadOnly(appMeta.schemaVersion);
     } else if (validatedLatest.invalidEntries.length > 0) {
+      futureSchemaRawState = null;
       saveRecoveryLogBestEffort(validatedLatest.invalidEntries, appMeta.schemaVersion || 1);
+    } else {
+      futureSchemaRawState = null;
     }
     externalStorageChangePending = false;
     renderDashboard();
