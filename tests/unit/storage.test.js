@@ -31,6 +31,23 @@ test("revision不一致では既存データを上書きしない", function () 
   assert.equal(storage.getItem("sales"), "[]");
 });
 
+test("将来バージョンのメタ情報は旧形式で上書きしない", function () {
+  const originalSales = JSON.stringify([{ id: "future", futureField: true }]);
+  const originalMeta = JSON.stringify({ schemaVersion: 99, revision: 4, futureMeta: true });
+  const storage = createMemoryStorage({ sales: originalSales, meta: originalMeta });
+  const result = commitState({
+    storage, salesKey: "sales", metaKey: "meta", expectedRevision: 4,
+    allowStaleRevision: false, createNextSales: () => [],
+    schemaVersion: 2, nowText: "now", markChanged: true
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "future-schema");
+  assert.equal(result.currentSchemaVersion, 99);
+  assert.equal(storage.getItem("sales"), originalSales);
+  assert.equal(storage.getItem("meta"), originalMeta);
+});
+
 test("Web Locks非対応時はrevision検査を省略できない", function () {
   const storage = createMemoryStorage({
     sales: JSON.stringify([{ id: "other-tab" }]),

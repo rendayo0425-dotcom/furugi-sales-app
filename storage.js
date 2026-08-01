@@ -70,6 +70,17 @@
       return { ok: false, reason: "invalid-current-data", rollbackFailed: false };
     }
 
+    // 将来版のメタ情報を旧版から保存すると項目を失うため、ストレージ層でも書込みを拒否します。
+    if (Number.isInteger(parsedMeta.value.schemaVersion)
+      && parsedMeta.value.schemaVersion > schemaVersion) {
+      return {
+        ok: false,
+        reason: "future-schema",
+        currentSchemaVersion: parsedMeta.value.schemaVersion,
+        rollbackFailed: false
+      };
+    }
+
     const currentRevision = Number.isInteger(parsedMeta.value.revision) ? parsedMeta.value.revision : 0;
     if (!allowStaleRevision && currentRevision !== expectedRevision) {
       return { ok: false, reason: "conflict", currentRevision, rollbackFailed: false };

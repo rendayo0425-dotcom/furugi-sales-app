@@ -28,6 +28,61 @@
     return Number.isFinite(number) ? number : fallbackValue;
   }
 
+  function isStrictIsoDate(dateText) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText || "")) return false;
+    const [year, month, day] = dateText.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year
+      && date.getMonth() === month - 1
+      && date.getDate() === day;
+  }
+
+  // 保存済みデータは、欠損している任意項目だけ0として扱い、異常値は勝手に補正せず隔離します。
+  function getPersistedSaleInvalidReasons(record, salesChannels) {
+    const reasons = [];
+    if (!record || typeof record !== "object" || Array.isArray(record)) {
+      return ["商品データがオブジェクトではありません"];
+    }
+
+    if (!isStrictIsoDate(record.saleDate)) reasons.push("販売日が不正です");
+    if (!salesChannels.includes(record.salesChannel)) reasons.push("販路が不正です");
+    if (typeof record.itemName !== "string" || !record.itemName.trim()) reasons.push("商品名が空欄です");
+
+    const salePrice = Number(record.salePrice);
+    if (record.salePrice === "" || record.salePrice === null || record.salePrice === undefined
+      || !Number.isFinite(salePrice) || salePrice < 1) {
+      reasons.push("売値が不正です");
+    }
+
+    [
+      { key: "costPrice", label: "仕入れ値" },
+      { key: "shippingFee", label: "送料" }
+    ].forEach(function (field) {
+      const value = record[field.key];
+      if (value === "" || value === null || value === undefined) return;
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < 0) reasons.push(`${field.label}が不正です`);
+    });
+
+    const feeRateValue = record.feeRate;
+    if (feeRateValue !== "" && feeRateValue !== null && feeRateValue !== undefined) {
+      const feeRate = Number(feeRateValue);
+      if (!Number.isFinite(feeRate) || feeRate < 0 || feeRate > 100) {
+        reasons.push("販売手数料率が不正です");
+      }
+    }
+
+    if (record.purchaseDate !== "" && record.purchaseDate !== null && record.purchaseDate !== undefined) {
+      if (!isStrictIsoDate(record.purchaseDate)) {
+        reasons.push("仕入日が不正です");
+      } else if (isStrictIsoDate(record.saleDate) && record.purchaseDate > record.saleDate) {
+        reasons.push("仕入日が販売日より後です");
+      }
+    }
+
+    return reasons;
+  }
+
   // v1の商品をv2へ移すときも、画像・メモ・将来追加された未知項目はそのまま残します。
   function normalizeSaleRecord(record, fallbackId, calculateDays) {
     const source = record && typeof record === "object" && !Array.isArray(record) ? record : {};
@@ -231,6 +286,8 @@
     calculateProfit,
     normalizeAppMeta,
     normalizeSaleRecord,
+    isStrictIsoDate,
+    getPersistedSaleInvalidReasons,
     partitionRecords,
     mergeQuarantinedRecords,
     protectCsvText,

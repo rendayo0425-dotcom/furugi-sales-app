@@ -1,8 +1,8 @@
 // キャッシュ名を変えると、古いキャッシュを削除して新しいファイルを使いやすくなります。
 // HTML/CSS/JSを大きく変更したのに反映されないときは、末尾の番号を1つ増やしてください。
 const CACHE_PREFIX = "used-clothes-sales-";
-const CACHE_NAME = "used-clothes-sales-v12";
-const ASSET_VERSION = "20260801-4";
+const CACHE_NAME = "used-clothes-sales-v13";
+const ASSET_VERSION = "20260801-5";
 
 // オフラインでも最低限アプリ画面を開けるように、基本ファイルだけ保存します。
 // 画像やCSVは容量が大きくなりやすいので、ここではキャッシュしません。

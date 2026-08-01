@@ -183,6 +183,8 @@ let storageLoadBlocked = false;
 
 // 保存中の二重操作と、別タブで更新された古いデータの上書きを防ぐために使います
 let storageWriteBlocked = false;
+// このアプリより新しい保存形式は表示だけ行い、古い形式で上書きしないようにします
+let futureSchemaReadOnly = false;
 let appMeta = null;
 let currentRevision = 0;
 let formSubmitInProgress = false;
@@ -889,14 +891,17 @@ function updateCsvImportPreview() {
 
   importIssueCount.textContent = `${pendingCsvImport.issues.length}件`;
   csvNoIssues.hidden = pendingCsvImport.issues.length > 0;
-  confirmCsvImportButton.disabled = pendingCsvImport.sales.length === 0 || pendingCsvImport.fatalError;
+  confirmCsvImportButton.disabled = futureSchemaReadOnly
+    || storageWriteBlocked
+    || pendingCsvImport.sales.length === 0
+    || pendingCsvImport.fatalError;
   confirmCsvImportButton.textContent = "確認してCSVを読み込む";
 }
 
 function clearPendingCsvImport() {
   importReadGeneration += 1;
   pendingCsvImport = null;
-  csvFileInput.disabled = false;
+  csvFileInput.disabled = storageWriteBlocked || futureSchemaReadOnly;
   csvFileInput.value = "";
   csvIssueList.innerHTML = "";
 }
@@ -906,16 +911,21 @@ function clearPendingImportReview() {
   importReadGeneration += 1;
   pendingCsvImport = null;
   pendingJsonRestore = null;
-  csvFileInput.disabled = false;
+  csvFileInput.disabled = storageWriteBlocked || futureSchemaReadOnly;
   csvFileInput.value = "";
   csvIssueList.innerHTML = "";
-  jsonBackupInput.disabled = false;
+  jsonBackupInput.disabled = storageWriteBlocked || futureSchemaReadOnly;
   jsonBackupInput.value = "";
   exportJsonBackupButton.disabled = storageLoadBlocked;
 }
 
 // CSVファイルは選択時に検証するだけで、確定ボタンを押すまで保存しません
 function stageCsvImport(file) {
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    csvFileInput.value = "";
+    return;
+  }
   if (!UsedClothesCore.isFileSizeAllowed(file.size, CSV_MAX_BYTES)) {
     showDataManagementStatus("CSVは5MB以下のファイルを選択してください。", "error");
     csvFileInput.value = "";
@@ -934,7 +944,7 @@ function stageCsvImport(file) {
 
   function finalizeCsvStaging() {
     if (requestId === importReadGeneration) {
-      csvFileInput.disabled = false;
+      csvFileInput.disabled = storageWriteBlocked || futureSchemaReadOnly;
     }
   }
 
@@ -988,11 +998,15 @@ async function confirmCsvImport() {
   if (!pendingCsvImport || pendingCsvImport.sales.length === 0) {
     return;
   }
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    return;
+  }
 
   const importMode = getSelectedCsvImportMode();
   const isReplaceMode = importMode === "replace";
   const backupCreatedAt = isReplaceMode
-    ? downloadDestructiveBackup(pendingCsvImport.sourceRevision, "csv-replace")
+    ? confirmDestructiveBackup(pendingCsvImport.sourceRevision, "csv-replace")
     : "";
   if (isReplaceMode && !backupCreatedAt) return;
   const importedCount = pendingCsvImport.sales.length;
@@ -1868,15 +1882,17 @@ function setStorageDependentControlsDisabled(disabled) {
   });
 }
 
+function activateFutureSchemaReadOnly(schemaVersion) {
+  futureSchemaReadOnly = true;
+  storageWriteBlocked = true;
+  setStorageDependentControlsDisabled(true);
+  exportJsonBackupButton.disabled = false;
+  showDataManagementStatus(`このデータは新しいバージョン（形式${schemaVersion}）で作成されています。閲覧と書き出しのみ利用できます。`, "error");
+}
+
 // 修復不能な必須値を持つ行は一覧から隔離し、元データの場所と理由を記録します。
 function getUnrecoverableSaleReasons(sale) {
-  const reasons = [];
-  if (!sale || typeof sale !== "object" || Array.isArray(sale)) return ["商品データがオブジェクトではありません"];
-  if (!isStrictDateText(sale.saleDate)) reasons.push("販売日が不正です");
-  if (!salesChannels.includes(sale.salesChannel)) reasons.push("販路が不正です");
-  if (typeof sale.itemName !== "string" || !sale.itemName.trim()) reasons.push("商品名が空欄です");
-  if (parseOptionalNumber(sale.salePrice) === null || Number(sale.salePrice) < 1) reasons.push("売値が不正です");
-  return reasons;
+  return UsedClothesCore.getPersistedSaleInvalidReasons(sale, salesChannels);
 }
 
 // 保存済み配列を読み直す経路では、修復不能な行を必ず除外してから画面・再保存へ渡します。
@@ -1930,6 +1946,10 @@ function readLatestStoredState() {
 
 // 売上とメタ情報をロック内で一緒に保存し、失敗時は画面データを変更しません。
 async function commitSales(nextSalesOrFactory, successMessage, options = {}) {
+  if (futureSchemaReadOnly) {
+    showDataManagementStatus(`このデータは新しいバージョン（形式${appMeta.schemaVersion}）で作成されています。この画面では閲覧と書き出しだけ利用できます。`, "error");
+    return false;
+  }
   if (!storageAvailable || storageLoadBlocked || storageWriteBlocked) {
     showDataManagementStatus("端末内保存を利用できないため、データを変更できません。", "error");
     return false;
@@ -1973,6 +1993,8 @@ async function commitSales(nextSalesOrFactory, successMessage, options = {}) {
     } else if (result.reason === "conflict") {
       externalStorageChangePending = true;
       showDataManagementStatus("別の画面でデータが更新されました。入力内容を保ったまま保存を中止しました。再読み込みして確認してください。", "error");
+    } else if (result.reason === "future-schema") {
+      activateFutureSchemaReadOnly(result.currentSchemaVersion);
     } else {
       showDataManagementStatus("保存できませんでした。保存容量またはブラウザ設定を確認してください。データは変更していません。", "error");
     }
@@ -2024,6 +2046,22 @@ async function loadSales() {
   appMeta = sourceMeta;
   currentRevision = sourceMeta.revision;
 
+  // 将来版は内容を表示できますが、この旧版から保存して形式を下げることはしません。
+  if (sourceMeta.schemaVersion > APP_SCHEMA_VERSION) {
+    const partitioned = normalizeValidSalesRecords(rawSales);
+    sales = partitioned.sales;
+    quarantinedSales = partitioned.quarantinedRecords;
+    storageLoadBlocked = false;
+    activateFutureSchemaReadOnly(sourceMeta.schemaVersion);
+    const excludedNote = partitioned.invalidEntries.length > 0
+      ? ` 不正な${partitioned.invalidEntries.length}点は表示から隔離しました。`
+      : "";
+    if (excludedNote) {
+      showDataManagementStatus(`このデータは新しいバージョン（形式${sourceMeta.schemaVersion}）のため読取専用です。${excludedNote}`, "error");
+    }
+    return;
+  }
+
   const normalizedSales = [];
   const nextQuarantinedSales = [];
   const recoveryEntries = [];
@@ -2073,8 +2111,13 @@ function downloadTextFile(text, fileName, mimeType) {
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  // Safari/PWAが保存処理を受け取る前にURLを破棄しないよう、十分に待ってから解放します。
+  setTimeout(function () {
+    URL.revokeObjectURL(url);
+  }, 60000);
 }
 
 // 商品画像と設定を含む、アプリ全体の完全バックアップを作ります
@@ -2140,6 +2183,18 @@ function downloadDestructiveBackup(expectedRevision, suffix) {
   return backup.createdAt;
 }
 
+// 置換・復元・全削除は、バックアップ開始後に利用者が保存を確認した場合だけ続行します。
+function confirmDestructiveBackup(expectedRevision, suffix) {
+  const backupCreatedAt = downloadDestructiveBackup(expectedRevision, suffix);
+  if (!backupCreatedAt) return "";
+  const confirmed = confirm("バックアップファイルが保存されたことを確認しましたか？\n保存を確認できない場合は「キャンセル」を選んでください。");
+  if (!confirmed) {
+    showDataManagementStatus("バックアップの保存確認が完了していないため、データの変更を中止しました。", "warning");
+    return "";
+  }
+  return backupCreatedAt;
+}
+
 async function downloadJsonBackup() {
   if (storageLoadBlocked) {
     showDataManagementStatus(
@@ -2156,6 +2211,10 @@ async function downloadJsonBackup() {
     "application/json;charset=utf-8"
   );
   const backupCreatedAt = backup.createdAt;
+  if (futureSchemaReadOnly) {
+    showDataManagementStatus(`読取専用データ${sales.length}点の完全バックアップを作成しました。バックアップ日時は元データへ書き込んでいません。`, "warning");
+    return;
+  }
   const saved = await commitSales(sales, "", {
     markChanged: false,
     metaPatch: { lastBackupAt: backupCreatedAt }
@@ -2259,6 +2318,9 @@ function validateJsonBackup(backup) {
 
     if (!backup.appMeta || typeof backup.appMeta !== "object") {
       errors.push("アプリ情報がありません。");
+    } else if (Number.isInteger(backup.appMeta.schemaVersion)
+      && backup.appMeta.schemaVersion > APP_SCHEMA_VERSION) {
+      errors.push(`このJSONは新しいバージョン（形式${backup.appMeta.schemaVersion}）で作成されているため、復元できません。`);
     }
 
     if (!backup.collapsedSections || typeof backup.collapsedSections !== "object" || Array.isArray(backup.collapsedSections)) {
@@ -2283,7 +2345,7 @@ function restoreStorageValue(storageKey, previousValue) {
 
 function finalizeJsonRestoreControls() {
   exportJsonBackupButton.disabled = storageLoadBlocked;
-  jsonBackupInput.disabled = false;
+  jsonBackupInput.disabled = storageWriteBlocked || futureSchemaReadOnly;
   jsonBackupInput.value = "";
 }
 
@@ -2309,12 +2371,17 @@ function renderJsonImportReview() {
   jsonReviewCreatedAt.textContent = formatBackupDate(pendingJsonRestore.backup.createdAt);
   jsonReviewCount.textContent = `${pendingJsonRestore.backup.sales.length}点`;
   jsonReviewImageCount.textContent = `${imageCount}点`;
-  confirmCsvImportButton.disabled = false;
+  confirmCsvImportButton.disabled = storageWriteBlocked || futureSchemaReadOnly;
   confirmCsvImportButton.textContent = "確認してJSONを復元する";
 }
 
 // JSONファイルは選択時に検証し、確認画面で確定するまで保存しません
 function restoreJsonBackup(file) {
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    jsonBackupInput.value = "";
+    return;
+  }
   if (!canUseStorage) {
     showDataManagementStatus("このブラウザではJSONバックアップを復元できません。", "error");
     jsonBackupInput.value = "";
@@ -2334,7 +2401,7 @@ function restoreJsonBackup(file) {
   importReadGeneration = requestId;
   pendingCsvImport = null;
   pendingJsonRestore = null;
-  csvFileInput.disabled = false;
+  csvFileInput.disabled = storageWriteBlocked || futureSchemaReadOnly;
   csvFileInput.value = "";
   exportJsonBackupButton.disabled = true;
   jsonBackupInput.disabled = true;
@@ -2401,9 +2468,13 @@ async function confirmJsonRestore() {
   if (!pendingJsonRestore || !storageAvailable) {
     return;
   }
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    return;
+  }
 
   const { backup, normalizedSales, rawSales } = pendingJsonRestore;
-  const backupCreatedAt = downloadDestructiveBackup(pendingJsonRestore.sourceRevision, "json-restore");
+  const backupCreatedAt = confirmDestructiveBackup(pendingJsonRestore.sourceRevision, "json-restore");
   if (!backupCreatedAt) return;
   const restoredMeta = {
     ...backup.appMeta,
@@ -2576,6 +2647,10 @@ function resetForm() {
 
 // 編集ボタンが押された商品データをフォームへ戻します
 function startEditSale(id) {
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    return;
+  }
   const sale = sales.find(function (targetSale) {
     return saleIdsMatch(targetSale.id, id);
   });
@@ -3512,6 +3587,10 @@ async function undoLastDelete() {
 
 // 指定されたidの商品を削除します
 async function deleteSale(id) {
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    return;
+  }
   const deletedIndex = sales.findIndex(function (sale) { return saleIdsMatch(sale.id, id); });
   const deletedSale = sales[deletedIndex];
   if (!deletedSale || !confirm(`「${deletedSale.itemName}」を削除しますか？`)) {
@@ -3536,6 +3615,10 @@ async function deleteSale(id) {
 
 // すべての商品データだけを削除します。折りたたみ状態などの設定は残します
 async function deleteAllData() {
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    return;
+  }
   if (!confirm("すべての登録データを削除しますか？")) {
     return;
   }
@@ -3550,7 +3633,7 @@ async function deleteAllData() {
   }
 
   const sourceRevision = currentRevision;
-  const backupCreatedAt = downloadDestructiveBackup(sourceRevision, "delete-all");
+  const backupCreatedAt = confirmDestructiveBackup(sourceRevision, "delete-all");
   if (!backupCreatedAt) return;
   if (!await commitSales([], "", { replaceAll: true, expectedRevision: sourceRevision, metaPatch: { lastBackupAt: backupCreatedAt } })) return;
   discardDeleteUndo();
@@ -3605,12 +3688,14 @@ window.addEventListener("storage", function (event) {
     const validatedLatest = normalizeValidSalesRecords(latest.sales);
     sales = validatedLatest.sales;
     quarantinedSales = validatedLatest.quarantinedRecords;
-    if (validatedLatest.invalidEntries.length > 0) {
-      saveRecoveryLogBestEffort(validatedLatest.invalidEntries, latest.meta.schemaVersion || 1);
-    }
     appMeta = UsedClothesCore.normalizeAppMeta(latest.meta, APP_SCHEMA_VERSION, new Date().toISOString());
     delete appMeta.targetSchemaVersion;
     currentRevision = appMeta.revision;
+    if (appMeta.schemaVersion > APP_SCHEMA_VERSION) {
+      activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    } else if (validatedLatest.invalidEntries.length > 0) {
+      saveRecoveryLogBestEffort(validatedLatest.invalidEntries, appMeta.schemaVersion || 1);
+    }
     externalStorageChangePending = false;
     renderDashboard();
     const excludedMessage = validatedLatest.invalidEntries.length > 0
@@ -3815,6 +3900,11 @@ itemImageInput.addEventListener("change", async function () {
 form.addEventListener("submit", async function (event) {
   // フォーム送信でページが再読み込みされないようにします
   event.preventDefault();
+
+  if (futureSchemaReadOnly) {
+    activateFutureSchemaReadOnly(appMeta.schemaVersion);
+    return;
+  }
 
   if (formSubmitInProgress) {
     return;

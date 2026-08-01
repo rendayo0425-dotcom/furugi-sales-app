@@ -5,7 +5,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "../..");
 
-test("HTMLとService Workerの資産版・登録URLが一致し、v12で安全に更新する", function () {
+test("HTMLとService Workerの資産版・登録URLが一致し、v13で安全に更新する", function () {
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const worker = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
   const versionMatch = worker.match(/const ASSET_VERSION = "([^"]+)"/);
@@ -17,7 +17,7 @@ test("HTMLとService Workerの資産版・登録URLが一致し、v12で安全�
     assert.match(worker, new RegExp(`\\./${fileName.replace(".", "\\.")}\\?v=\\$\\{ASSET_VERSION\\}`));
   });
   assert.match(html, new RegExp(`service-worker\\.js\\?v=${version}`));
-  assert.match(worker, /const CACHE_NAME = "used-clothes-sales-v12"/);
+  assert.match(worker, /const CACHE_NAME = "used-clothes-sales-v13"/);
   assert.match(worker, /event\.waitUntil\(cacheUpdate\)/);
   assert.match(worker, /event\.respondWith\(/);
 });

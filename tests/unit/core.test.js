@@ -4,6 +4,7 @@ const {
   calculateProfit,
   normalizeAppMeta,
   normalizeSaleRecord,
+  getPersistedSaleInvalidReasons,
   partitionRecords,
   mergeQuarantinedRecords,
   protectCsvText,
@@ -16,6 +17,8 @@ const {
   getContainedSize,
   buildBackupPayload
 } = require("../../core.js");
+
+const channels = ["メルカリメイン", "メルカリサブ", "ヤフー", "ラクマ"];
 
 test("手数料は1円未満を切り捨て、利益も同じ値から計算する", function () {
   const result = calculateProfit(9999, 2000, 210, 10);
@@ -95,6 +98,25 @@ test("旧メタ情報へrevisionとバックアップ項目を後方互換で補
   assert.equal(result.lastBackupAt, "");
   assert.equal(result.lastDataChangeAt, "");
   assert.equal(result.custom, "keep");
+});
+
+test("保存済みの任意項目は欠損を許容し、異常値は理由付きで隔離する", function () {
+  const base = {
+    saleDate: "2026-07-10",
+    salesChannel: "メルカリメイン",
+    itemName: "検証商品",
+    salePrice: 1000
+  };
+
+  assert.deepEqual(getPersistedSaleInvalidReasons(base, channels), []);
+  assert.deepEqual(
+    getPersistedSaleInvalidReasons({ ...base, costPrice: -1, shippingFee: -2, feeRate: 101 }, channels),
+    ["仕入れ値が不正です", "送料が不正です", "販売手数料率が不正です"]
+  );
+  assert.deepEqual(
+    getPersistedSaleInvalidReasons({ ...base, purchaseDate: "2026-07-11" }, channels),
+    ["仕入日が販売日より後です"]
+  );
 });
 
 test("v1商品をv2へ移行してもID・画像・メモ・未知項目を保持する", function () {
