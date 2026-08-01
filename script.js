@@ -130,14 +130,20 @@ const jsonReviewImageCount = document.getElementById("jsonReviewImageCount");
 const STORAGE_KEY = "usedClothesSales";
 const COLLAPSE_STORAGE_KEY = "usedClothesCollapsedSections";
 const APP_META_STORAGE_KEY = "usedClothesAppMeta";
-const APP_SCHEMA_VERSION = 1;
+const RECOVERY_LOG_STORAGE_KEY = "usedClothesRecoveryLog";
+const STORAGE_PROBE_KEY = "usedClothesStorageProbe";
+const STORAGE_LOCK_NAME = "usedClothesSalesWrite";
+const APP_SCHEMA_VERSION = 2;
 const BACKUP_VERSION = 1;
 
-// localStorageが使えるブラウザかどうかを確認します
+// localStorageは存在確認だけでなく、実際に書込み・読込みできるか起動時に確認します
 const canUseStorage = typeof localStorage !== "undefined";
+let storageAvailable = canUseStorage && UsedClothesStorage.probeStorage(localStorage, STORAGE_PROBE_KEY);
 
 // 登録済みデータを入れておく配列です
 let sales = [];
+// 修復不能な行は画面には出しませんが、通常保存時に失わないよう原文のまま保持します
+let quarantinedSales = [];
 
 // セクションごとの折りたたみ状態を入れておくオブジェクトです
 let collapsedSections = {};
@@ -156,6 +162,13 @@ let globalStatusTimer = null;
 
 // 保存データが壊れていた場合、元の文字列を誤って上書きしないための印です
 let storageLoadBlocked = false;
+
+// 保存中の二重操作と、別タブで更新された古いデータの上書きを防ぐために使います
+let storageWriteBlocked = false;
+let appMeta = null;
+let currentRevision = 0;
+let formSubmitInProgress = false;
+let externalStorageChangePending = false;
 
 // 編集中の商品idです。nullのときは新規登録モードです
 let editingSaleId = null;
@@ -264,15 +277,7 @@ function formatAverageSaleDays(value) {
 
 // 入力値から手数料、利益、利益率を計算します
 function calculateProfit(salePrice, costPrice, shippingFee, feeRate) {
-  const fee = salePrice * feeRate / 100;
-  const profit = salePrice - fee - costPrice - shippingFee;
-  const profitRate = salePrice === 0 ? 0 : profit / salePrice * 100;
-
-  return {
-    fee,
-    profit,
-    profitRate
-  };
+  return UsedClothesCore.calculateProfit(salePrice, costPrice, shippingFee, feeRate);
 }
 
 // JSONが壊れていてもアプリ全体を止めず、呼び出し側で安全に判断できるようにします
@@ -360,45 +365,21 @@ function isStrictDateText(dateText) {
 
 // 旧データの未知項目は残しつつ、現在必要な項目と計算値を安全に補います
 function normalizeSaleRecord(record, fallbackId = Date.now()) {
-  const source = record && typeof record === "object" ? record : {};
-  const salePrice = getFiniteNumber(source.salePrice, 0);
-  const costPrice = getFiniteNumber(source.costPrice, 0);
-  const shippingFee = getFiniteNumber(source.shippingFee, 0);
-  const feeRate = getFiniteNumber(source.feeRate, 0);
-  const calculated = calculateProfit(salePrice, costPrice, shippingFee, feeRate);
-  const saleDate = typeof source.saleDate === "string" ? source.saleDate : "";
-  const purchaseDate = typeof source.purchaseDate === "string" ? source.purchaseDate : "";
-
-  return {
-    ...source,
-    id: source.id ?? fallbackId,
-    saleDate,
-    purchaseDate,
-    salesChannel: typeof source.salesChannel === "string" ? source.salesChannel : "",
-    itemName: typeof source.itemName === "string" ? source.itemName : "",
-    salePrice,
-    costPrice,
-    shippingFee,
-    feeRate,
-    fee: calculated.fee,
-    profit: calculated.profit,
-    profitRate: calculated.profitRate,
-    // 0日も正しい値なので、truthy判定を使わず日付から再計算します
-    saleDays: calculateSaleDays(saleDate, purchaseDate),
-    imageData: typeof source.imageData === "string" ? source.imageData : "",
-    memo: typeof source.memo === "string" ? source.memo : ""
-  };
+  return UsedClothesCore.normalizeSaleRecord(record, fallbackId, calculateSaleDays);
 }
 
 function createDefaultAppMeta() {
   return {
     schemaVersion: APP_SCHEMA_VERSION,
-    migratedAt: new Date().toISOString()
+    revision: 0,
+    migratedAt: new Date().toISOString(),
+    lastBackupAt: "",
+    lastDataChangeAt: ""
   };
 }
 
 function loadAppMeta() {
-  if (!canUseStorage) {
+  if (!storageAvailable) {
     return createDefaultAppMeta();
   }
 
@@ -416,16 +397,18 @@ function loadAppMeta() {
     return createDefaultAppMeta();
   }
 
-  return {
-    ...parsed.value,
-    schemaVersion: APP_SCHEMA_VERSION,
-    migratedAt: parsed.value.migratedAt || new Date().toISOString()
-  };
+  const normalizedMeta = UsedClothesCore.normalizeAppMeta(
+    parsed.value,
+    APP_SCHEMA_VERSION,
+    new Date().toISOString()
+  );
+  delete normalizedMeta.targetSchemaVersion;
+  return normalizedMeta;
 }
 
 function saveAppMeta(appMeta) {
-  if (!canUseStorage) {
-    return true;
+  if (!storageAvailable) {
+    return false;
   }
 
   try {
@@ -931,6 +914,8 @@ function clearPendingImportReview() {
 // CSVファイルは選択時に検証するだけで、確定ボタンを押すまで保存しません
 function stageCsvImport(file) {
   const reader = new FileReader();
+  // ファイル選択後の別タブ更新を、置き換え確定時に見逃さないため開始時点を記録します。
+  const sourceRevision = currentRevision;
   const requestId = importReadGeneration + 1;
   importReadGeneration = requestId;
   pendingCsvImport = null;
@@ -953,6 +938,7 @@ function stageCsvImport(file) {
 
       pendingCsvImport = validateCsvText(String(reader.result || ""));
       pendingCsvImport.fileName = file.name || "CSVファイル";
+      pendingCsvImport.sourceRevision = sourceRevision;
       updateCsvImportPreview();
 
       const acceptedCount = pendingCsvImport.validCount + pendingCsvImport.warningCount;
@@ -990,18 +976,25 @@ function stageCsvImport(file) {
   }
 }
 
-function confirmCsvImport() {
+async function confirmCsvImport() {
   if (!pendingCsvImport || pendingCsvImport.sales.length === 0) {
     return;
   }
 
   const importMode = getSelectedCsvImportMode();
   const isReplaceMode = importMode === "replace";
-  const baseSales = isReplaceMode ? [] : sales;
-  const safeImportedSales = ensureUniqueImportedIds(pendingCsvImport.sales, baseSales);
-  const nextSales = isReplaceMode ? safeImportedSales : [...safeImportedSales, ...sales];
+  const importedCount = pendingCsvImport.sales.length;
+  const nextSales = isReplaceMode
+    ? ensureUniqueImportedIds(pendingCsvImport.sales, [])
+    : function (latestSales) {
+      const safeImportedSales = ensureUniqueImportedIds(pendingCsvImport.sales, latestSales);
+      return [...safeImportedSales, ...latestSales];
+    };
+  const commitOptions = isReplaceMode
+    ? { expectedRevision: pendingCsvImport.sourceRevision, replaceAll: true }
+    : { mergeLatest: true };
 
-  if (!commitSales(nextSales, `CSVから${safeImportedSales.length}件を読み込みました。`)) {
+  if (!await commitSales(nextSales, `CSVから${importedCount}件を読み込みました。`, commitOptions)) {
     return;
   }
 
@@ -1812,108 +1805,209 @@ async function copyAiAnalysisText() {
   }
 }
 
-// localStorageから登録済みデータを安全に読み込みます
-function loadSales() {
-  if (!canUseStorage) {
-    exportJsonBackupButton.disabled = true;
-    showDataManagementStatus("このブラウザでは端末内保存を利用できません。", "warning");
-    return;
-  }
-
-  let savedSales = null;
-
-  try {
-    savedSales = localStorage.getItem(STORAGE_KEY);
-  } catch (error) {
-    storageLoadBlocked = true;
-    exportJsonBackupButton.disabled = true;
-    showDataManagementStatus("端末内の保存領域を読み込めませんでした。ブラウザの設定を確認してください。", "error");
-    return;
-  }
-
-  if (!savedSales) {
-    sales = [];
-    storageLoadBlocked = false;
-    exportJsonBackupButton.disabled = false;
-    showDataManagementStatus("保存データは0件です。JSON完全バックアップを定期的に保存してください。");
-    return;
-  }
-
-  const parsed = safeParseJson(savedSales, null);
-
-  if (!parsed.ok || !Array.isArray(parsed.value)) {
-    sales = [];
-    storageLoadBlocked = true;
-    exportJsonBackupButton.disabled = true;
-    showDataManagementStatus(
-      "端末内の売上データが壊れているため読み込めませんでした。元データは上書きしていません。JSONバックアップを復元してください。",
-      "error"
-    );
-    return;
-  }
-
-  const normalizedSales = parsed.value.map(function (sale, index) {
-    return normalizeSaleRecord(sale, Date.now() + index);
+function setStorageDependentControlsDisabled(disabled) {
+  [submitButton, csvFileInput, jsonBackupInput, deleteAllDataButton, confirmCsvImportButton].forEach(function (control) {
+    if (control) control.disabled = disabled;
   });
+}
+
+// 修復不能な必須値を持つ行は一覧から隔離し、元データの場所と理由を記録します。
+function getUnrecoverableSaleReasons(sale) {
+  const reasons = [];
+  if (!sale || typeof sale !== "object" || Array.isArray(sale)) return ["商品データがオブジェクトではありません"];
+  if (!isStrictDateText(sale.saleDate)) reasons.push("販売日が不正です");
+  if (!salesChannels.includes(sale.salesChannel)) reasons.push("販路が不正です");
+  if (typeof sale.itemName !== "string" || !sale.itemName.trim()) reasons.push("商品名が空欄です");
+  if (parseOptionalNumber(sale.salePrice) === null || Number(sale.salePrice) < 1) reasons.push("売値が不正です");
+  return reasons;
+}
+
+// 保存済み配列を読み直す経路では、修復不能な行を必ず除外してから画面・再保存へ渡します。
+function normalizeValidSalesRecords(sourceSales) {
+  const partitioned = UsedClothesCore.partitionRecords(
+    sourceSales,
+    getUnrecoverableSaleReasons,
+    function (source, index) { return normalizeSaleRecord(source, Date.now() + index); }
+  );
+  const invalidEntries = partitioned.quarantinedRecords.map(function (entry) {
+    return createRecoveryDiff(entry.record, null, entry.index, entry.reasons);
+  });
+
+  return {
+    sales: ensureUniqueImportedIds(partitioned.visibleRecords, []),
+    invalidEntries,
+    quarantinedRecords: partitioned.quarantinedRecords
+  };
+}
+
+function createRecoveryDiff(source, normalized, index, reasons = []) {
+  const changedFields = {};
+  const comparableKeys = ["id", "saleDate", "purchaseDate", "salesChannel", "itemName", "salePrice", "costPrice", "shippingFee", "feeRate", "fee", "profit", "profitRate", "saleDays", "memo"];
+  comparableKeys.forEach(function (key) {
+    if (JSON.stringify(source && source[key]) !== JSON.stringify(normalized && normalized[key])) {
+      changedFields[key] = { before: source && source[key], after: normalized && normalized[key] };
+    }
+  });
+  return { index, id: source && source.id, reasons, changedFields };
+}
+
+function saveRecoveryLogBestEffort(entries, sourceSchemaVersion) {
+  if (!storageAvailable || entries.length === 0) return;
+  try {
+    localStorage.setItem(RECOVERY_LOG_STORAGE_KEY, JSON.stringify({
+      capturedAt: new Date().toISOString(),
+      sourceSchemaVersion,
+      entries
+    }));
+  } catch (error) {
+    console.warn("補正履歴を保存できませんでした。", error);
+  }
+}
+
+function readLatestStoredState() {
+  const salesResult = safeParseJson(localStorage.getItem(STORAGE_KEY), []);
+  const metaResult = safeParseJson(localStorage.getItem(APP_META_STORAGE_KEY), {});
+  if (!salesResult.ok || !Array.isArray(salesResult.value) || !metaResult.ok) return null;
+  return { sales: salesResult.value, meta: metaResult.value || {} };
+}
+
+// 売上とメタ情報をロック内で一緒に保存し、失敗時は画面データを変更しません。
+async function commitSales(nextSalesOrFactory, successMessage, options = {}) {
+  if (!storageAvailable || storageLoadBlocked || storageWriteBlocked) {
+    showDataManagementStatus("端末内保存を利用できないため、データを変更できません。", "error");
+    return false;
+  }
+
+  const lockManager = navigator.locks;
+  const hasExclusiveLock = UsedClothesStorage.supportsExclusiveLock(lockManager);
+  const result = await UsedClothesStorage.withExclusiveLock(
+    lockManager,
+    STORAGE_LOCK_NAME,
+    function () {
+      return UsedClothesStorage.commitState({
+        storage: localStorage,
+        salesKey: STORAGE_KEY,
+        metaKey: APP_META_STORAGE_KEY,
+        expectedRevision: options.expectedRevision ?? currentRevision,
+        // 最新データへの追加でrevisionを越えられるのは、排他ロックが実在する場合だけです。
+        allowStaleRevision: Boolean(options.mergeLatest && hasExclusiveLock),
+        createNextSales: function (latestSales) {
+          const partitioned = normalizeValidSalesRecords(latestSales);
+          const nextVisibleSales = typeof nextSalesOrFactory === "function"
+            ? nextSalesOrFactory(partitioned.sales)
+            : nextSalesOrFactory;
+          return options.replaceAll
+            ? nextVisibleSales
+            : UsedClothesCore.mergeQuarantinedRecords(nextVisibleSales, partitioned.quarantinedRecords);
+        },
+        schemaVersion: APP_SCHEMA_VERSION,
+        nowText: new Date().toISOString(),
+        markChanged: options.markChanged !== false,
+        metaPatch: options.metaPatch || null
+      });
+    }
+  );
+
+  if (!result.ok) {
+    if (result.rollbackFailed) {
+      storageWriteBlocked = true;
+      setStorageDependentControlsDisabled(true);
+      showDataManagementStatus("保存の復旧に失敗したため、追加の書き込みを停止しました。JSONバックアップを作成してページを再読み込みしてください。", "error");
+    } else if (result.reason === "conflict") {
+      externalStorageChangePending = true;
+      showDataManagementStatus("別の画面でデータが更新されました。入力内容を保ったまま保存を中止しました。再読み込みして確認してください。", "error");
+    } else {
+      showDataManagementStatus("保存できませんでした。保存容量またはブラウザ設定を確認してください。データは変更していません。", "error");
+    }
+    return false;
+  }
+
+  const committedPartition = normalizeValidSalesRecords(result.sales);
+  sales = committedPartition.sales;
+  quarantinedSales = committedPartition.quarantinedRecords;
+  appMeta = result.meta;
+  currentRevision = result.meta.revision;
+  externalStorageChangePending = false;
+  if (successMessage) showDataManagementStatus(successMessage);
+  return true;
+}
+
+// localStorageから登録済みデータを検証し、v1だけ安全にv2へ移行します。
+async function loadSales() {
+  if (!storageAvailable) {
+    storageLoadBlocked = true;
+    exportJsonBackupButton.disabled = true;
+    setStorageDependentControlsDisabled(true);
+    showDataManagementStatus("このブラウザでは端末内保存を利用できません。設定を確認してから再読み込みしてください。", "error");
+    return;
+  }
+
+  let storedState;
+  try {
+    storedState = readLatestStoredState();
+  } catch (error) {
+    storedState = null;
+  }
+
+  if (!storedState) {
+    sales = [];
+    storageLoadBlocked = true;
+    exportJsonBackupButton.disabled = true;
+    showDataManagementStatus("端末内の売上データが壊れています。元の文字列は上書きしていません。", "error");
+    return;
+  }
+
+  const rawSales = storedState.sales;
+  const sourceMeta = UsedClothesCore.normalizeAppMeta(
+    { schemaVersion: rawSales.length > 0 ? 1 : APP_SCHEMA_VERSION, ...storedState.meta },
+    APP_SCHEMA_VERSION,
+    new Date().toISOString()
+  );
+  delete sourceMeta.targetSchemaVersion;
+  appMeta = sourceMeta;
+  currentRevision = sourceMeta.revision;
+
+  const normalizedSales = [];
+  const nextQuarantinedSales = [];
+  const recoveryEntries = [];
+  rawSales.forEach(function (source, index) {
+    const reasons = getUnrecoverableSaleReasons(source);
+    const normalized = normalizeSaleRecord(source, Date.now() + index);
+    const diff = createRecoveryDiff(source, normalized, index, reasons);
+    if (reasons.length === 0) normalizedSales.push(normalized);
+    else nextQuarantinedSales.push({ index, record: source, reasons });
+    if (reasons.length > 0 || Object.keys(diff.changedFields).length > 0) recoveryEntries.push(diff);
+  });
+
   const duplicateIdCount = countDuplicateSaleIds(normalizedSales);
   sales = ensureUniqueImportedIds(normalizedSales, []);
+  quarantinedSales = nextQuarantinedSales;
+  if (duplicateIdCount > 0) recoveryEntries.push({ reasons: [`重複ID ${duplicateIdCount}件を画面内で再採番しました`], changedFields: {} });
+  saveRecoveryLogBestEffort(recoveryEntries, sourceMeta.schemaVersion);
   storageLoadBlocked = false;
   exportJsonBackupButton.disabled = false;
 
-  if (duplicateIdCount > 0) {
-    if (saveSales(sales)) {
-      showDataManagementStatus(
-        `${sales.length}件を読み込み、詳細URLが重なるID ${duplicateIdCount}件を安全なIDへ修正しました。`,
-        "warning"
-      );
+  const excludedCount = rawSales.length - normalizedSales.length;
+  if (sourceMeta.schemaVersion < APP_SCHEMA_VERSION && excludedCount === 0) {
+    const oldProfitTotal = rawSales.reduce(function (total, sale) { return total + getFiniteNumber(sale && sale.profit, 0); }, 0);
+    const newProfitTotal = sales.reduce(function (total, sale) { return total + sale.profit; }, 0);
+    const adjustedCount = recoveryEntries.filter(function (entry) {
+      return entry.changedFields && (entry.changedFields.fee || entry.changedFields.profit || entry.changedFields.profitRate);
+    }).length;
+    const migrated = await commitSales(sales, "", { expectedRevision: currentRevision, markChanged: false });
+    if (migrated) {
+      showDataManagementStatus(`手数料の端数規則を更新し、${adjustedCount}点を補正しました。利益合計の差額は${formatYen(newProfitTotal - oldProfitTotal)}です。`, "warning");
+      return;
     }
+    // 保存失敗の通知を成功メッセージで消さず、v1の元データも自動上書きしません。
     return;
   }
 
-  showDataManagementStatus(`${sales.length}件の保存データを安全に読み込みました。`);
-}
-
-// 保存容量超過などを捕捉し、成功した場合だけ呼び出し側が配列を更新できるようにします
-function saveSales(nextSales = sales, options = {}) {
-  if (!canUseStorage) {
-    return true;
+  if (excludedCount > 0) {
+    showDataManagementStatus(`${sales.length}点を読み込み、修復不能な${excludedCount}点を除外しました。元の保存文字列は上書きしていません。`, "warning");
+    return;
   }
-
-  if (storageLoadBlocked) {
-    showDataManagementStatus(
-      "壊れた保存データを保護しているため上書きできません。JSONバックアップを復元してから操作してください。",
-      "error"
-    );
-    return false;
-  }
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSales));
-    return true;
-  } catch (error) {
-    if (!options.silent) {
-      showDataManagementStatus(
-        "保存できませんでした。商品画像によりブラウザの保存容量を超えた可能性があります。データは変更していません。",
-        "error"
-      );
-    }
-    return false;
-  }
-}
-
-// 配列とlocalStorageを同時に確定し、保存失敗時は現在の画面データを維持します
-function commitSales(nextSales, successMessage) {
-  if (!saveSales(nextSales)) {
-    return false;
-  }
-
-  sales = nextSales;
-
-  if (successMessage) {
-    showDataManagementStatus(successMessage);
-  }
-
-  return true;
+  showDataManagementStatus(`${sales.length}点の保存データを安全に読み込みました。`);
 }
 
 function downloadTextFile(text, fileName, mimeType) {
@@ -1937,7 +2031,7 @@ function buildJsonBackup() {
   };
 }
 
-function downloadJsonBackup() {
+async function downloadJsonBackup() {
   if (storageLoadBlocked) {
     showDataManagementStatus(
       "破損した保存データを空のバックアップで上書きしないため、完全バックアップを停止しています。正常なJSONバックアップを復元してください。",
@@ -1952,7 +2046,14 @@ function downloadJsonBackup() {
     `used-clothes-backup-${getTodayText()}.json`,
     "application/json;charset=utf-8"
   );
-  showDataManagementStatus(`画像を含む${sales.length}件の完全バックアップを保存しました。`);
+  const backupCreatedAt = backup.createdAt;
+  const saved = await commitSales(sales, "", {
+    markChanged: false,
+    metaPatch: { lastBackupAt: backupCreatedAt }
+  });
+  if (saved) {
+    showDataManagementStatus(`画像を含む${sales.length}件の完全バックアップを作成しました。`);
+  }
 }
 
 function validateBackupSale(sale, index) {
@@ -2112,6 +2213,8 @@ function restoreJsonBackup(file) {
   }
 
   const reader = new FileReader();
+  // JSON選択後に別画面のデータが変わった場合、古い確認内容で上書きしないようにします。
+  const sourceRevision = currentRevision;
   const requestId = importReadGeneration + 1;
   importReadGeneration = requestId;
   pendingCsvImport = null;
@@ -2145,7 +2248,8 @@ function restoreJsonBackup(file) {
       pendingJsonRestore = {
         backup,
         normalizedSales,
-        fileName: file.name || "JSONバックアップ"
+        fileName: file.name || "JSONバックアップ",
+        sourceRevision
       };
       renderJsonImportReview();
       showDataManagementStatus(`${normalizedSales.length}件のJSONバックアップを検証しました。内容を確認してください。`);
@@ -2175,50 +2279,33 @@ function restoreJsonBackup(file) {
 }
 
 // 復元処理は3つの保存先すべてに成功した場合だけ画面へ反映します
-function confirmJsonRestore() {
-  if (!pendingJsonRestore || !canUseStorage) {
+async function confirmJsonRestore() {
+  if (!pendingJsonRestore || !storageAvailable) {
     return;
   }
 
   const { backup, normalizedSales } = pendingJsonRestore;
-  let previousValues;
-
-  try {
-    // 読み取り自体が禁止されている環境でも、現在データを推測で上書きしません
-    previousValues = {
-      sales: localStorage.getItem(STORAGE_KEY),
-      meta: localStorage.getItem(APP_META_STORAGE_KEY),
-      collapsed: localStorage.getItem(COLLAPSE_STORAGE_KEY)
-    };
-  } catch (error) {
-    showDataManagementStatus("端末内の現在データを確認できないため復元を中止しました。", "error");
-    return;
-  }
-
   const restoredMeta = {
     ...backup.appMeta,
     schemaVersion: APP_SCHEMA_VERSION,
-    migratedAt: new Date().toISOString()
+    migratedAt: new Date().toISOString(),
+    lastDataChangeAt: new Date().toISOString()
   };
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedSales));
-    localStorage.setItem(APP_META_STORAGE_KEY, JSON.stringify(restoredMeta));
-    localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(backup.collapsedSections));
-  } catch (error) {
-    try {
-      restoreStorageValue(STORAGE_KEY, previousValues.sales);
-      restoreStorageValue(APP_META_STORAGE_KEY, previousValues.meta);
-      restoreStorageValue(COLLAPSE_STORAGE_KEY, previousValues.collapsed);
-    } catch (rollbackError) {
-      console.error("バックアップ復元のロールバックに失敗しました。", rollbackError);
-    }
-
-    showDataManagementStatus("保存容量不足などにより復元できませんでした。復元前のデータを維持しています。", "error");
+  const committed = await commitSales(normalizedSales, "", {
+    expectedRevision: pendingJsonRestore.sourceRevision,
+    metaPatch: restoredMeta,
+    replaceAll: true
+  });
+  if (!committed) {
     return;
   }
 
-  sales = normalizedSales;
+  try {
+    localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(backup.collapsedSections));
+  } catch (error) {
+    showDataManagementStatus("売上データは復元しましたが、画面設定を復元できませんでした。", "warning");
+  }
+
   collapsedSections = { ...backup.collapsedSections };
   storageLoadBlocked = false;
   pendingJsonRestore = null;
@@ -3244,7 +3331,7 @@ function renderDashboard() {
 }
 
 // 指定されたidの商品を削除します
-function deleteSale(id) {
+async function deleteSale(id) {
   if (!confirm("この商品を削除しますか？")) {
     return;
   }
@@ -3253,7 +3340,7 @@ function deleteSale(id) {
     return !saleIdsMatch(sale.id, id);
   });
 
-  if (!commitSales(nextSales, "商品を削除しました。")) {
+  if (!await commitSales(nextSales, "商品を削除しました。")) {
     return;
   }
 
@@ -3265,7 +3352,7 @@ function deleteSale(id) {
 }
 
 // すべての商品データだけを削除します。折りたたみ状態などの設定は残します
-function deleteAllData() {
+async function deleteAllData() {
   if (!confirm("すべての登録データを削除しますか？")) {
     return;
   }
@@ -3279,16 +3366,7 @@ function deleteAllData() {
     return;
   }
 
-  if (canUseStorage) {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch (error) {
-      showDataManagementStatus("全データを削除できませんでした。元データを維持しています。", "error");
-      return;
-    }
-  }
-
-  sales = [];
+  if (!await commitSales([], "", { replaceAll: true })) return;
   resetForm();
   renderDashboard();
   showDataManagementStatus("登録済みの売上データをすべて削除しました。");
@@ -3310,6 +3388,51 @@ window.addEventListener("hashchange", function () {
   }
 
   showRoute();
+});
+
+function hasUnsavedFormWork() {
+  return editingSaleId !== null
+    || itemName.value.trim() !== ""
+    || salePrice.value !== ""
+    || purchaseDateInput.value !== ""
+    || document.getElementById("costPrice").value !== ""
+    || document.getElementById("shippingFee").value !== ""
+    || document.getElementById("feeRate").value !== "10"
+    || document.getElementById("memo").value.trim() !== ""
+    || Boolean(itemImageInput.files[0]);
+}
+
+// 別タブの変更は未入力時だけ自動反映し、入力中は勝手に画面を書き換えません。
+window.addEventListener("storage", function (event) {
+  if (event.key !== STORAGE_KEY && event.key !== APP_META_STORAGE_KEY) return;
+  if (hasUnsavedFormWork()) {
+    externalStorageChangePending = true;
+    showDataManagementStatus("別の画面で売上データが更新されました。入力内容は保持しています。保存前に再読み込みして確認してください。", "warning");
+    return;
+  }
+
+  try {
+    const latest = readLatestStoredState();
+    if (!latest) throw new Error("invalid storage state");
+    const validatedLatest = normalizeValidSalesRecords(latest.sales);
+    sales = validatedLatest.sales;
+    quarantinedSales = validatedLatest.quarantinedRecords;
+    if (validatedLatest.invalidEntries.length > 0) {
+      saveRecoveryLogBestEffort(validatedLatest.invalidEntries, latest.meta.schemaVersion || 1);
+    }
+    appMeta = UsedClothesCore.normalizeAppMeta(latest.meta, APP_SCHEMA_VERSION, new Date().toISOString());
+    delete appMeta.targetSchemaVersion;
+    currentRevision = appMeta.revision;
+    externalStorageChangePending = false;
+    renderDashboard();
+    const excludedMessage = validatedLatest.invalidEntries.length > 0
+      ? ` 修復不能な${validatedLatest.invalidEntries.length}点は表示から除外しました。`
+      : "";
+    showDataManagementStatus(`別の画面で行われた更新を反映しました。${excludedMessage}`, "warning");
+  } catch (error) {
+    externalStorageChangePending = true;
+    showDataManagementStatus("別の画面の更新を安全に読み込めませんでした。ページを再読み込みしてください。", "error");
+  }
 });
 
 // 検索キーワードを入力したら、一覧だけを自動で絞り込みます
@@ -3355,13 +3478,13 @@ placeholderEditButton.addEventListener("click", function () {
   }
 });
 
-placeholderDeleteButton.addEventListener("click", function () {
+placeholderDeleteButton.addEventListener("click", async function () {
   if (placeholderSaleId === null) {
     return;
   }
 
   const deletingId = placeholderSaleId;
-  deleteSale(deletingId);
+  await deleteSale(deletingId);
 
   // キャンセル時は現在の商品が残るため、詳細画面もそのまま維持します
   if (!sales.some(function (sale) {
@@ -3391,8 +3514,8 @@ deleteAllDataButton.addEventListener("click", function () {
   deleteAllData();
 });
 
-exportJsonBackupButton.addEventListener("click", function () {
-  downloadJsonBackup();
+exportJsonBackupButton.addEventListener("click", async function () {
+  await downloadJsonBackup();
 });
 
 jsonBackupInput.addEventListener("change", function () {
@@ -3420,11 +3543,11 @@ document.querySelectorAll("input[name='importMode']").forEach(function (radio) {
   });
 });
 
-confirmCsvImportButton.addEventListener("click", function () {
+confirmCsvImportButton.addEventListener("click", async function () {
   if (pendingJsonRestore) {
-    confirmJsonRestore();
+    await confirmJsonRestore();
   } else {
-    confirmCsvImport();
+    await confirmCsvImport();
   }
 });
 
@@ -3496,6 +3619,17 @@ form.addEventListener("submit", async function (event) {
   // フォーム送信でページが再読み込みされないようにします
   event.preventDefault();
 
+  if (formSubmitInProgress) {
+    return;
+  }
+
+  formSubmitInProgress = true;
+  submitButton.disabled = true;
+  submitButton.textContent = editingSaleId === null ? "登録中…" : "更新中…";
+  form.setAttribute("aria-busy", "true");
+
+  try {
+
   // 画像を選んでいる場合は、リサイズ処理が終わるまで待ちます
   try {
     await imageResizePromise;
@@ -3565,6 +3699,7 @@ form.addEventListener("submit", async function (event) {
   };
 
   let nextSales;
+  let commitOptions = {};
 
   if (editingSaleId !== null) {
     // 編集中のときは、新規追加せず既存データを上書きします
@@ -3572,13 +3707,19 @@ form.addEventListener("submit", async function (event) {
       return saleIdsMatch(targetSale.id, editingSaleId) ? sale : targetSale;
     });
   } else {
-    // 新規登録のときは、一覧の先頭に追加します
-    nextSales = [sale, ...sales];
+    // 新規登録だけはロック内で最新版へ追加し、別タブの商品を消さないようにします
+    nextSales = function (latestValidSales) {
+      const latestIds = new Set(latestValidSales.map(function (targetSale) {
+        return getSaleIdKey(targetSale.id);
+      }));
+      return [{ ...sale, id: createUniqueSaleId(latestIds) }, ...latestValidSales];
+    };
+    commitOptions = { mergeLatest: true };
   }
 
   const successMessage = editingSaleId !== null ? "商品データを更新しました。" : "商品データを登録しました。";
 
-  if (!commitSales(nextSales, successMessage)) {
+  if (!await commitSales(nextSales, successMessage, commitOptions)) {
     return;
   }
 
@@ -3586,27 +3727,35 @@ form.addEventListener("submit", async function (event) {
 
   // 次の商品を入力しやすいようにフォームを初期状態へ戻します
   resetForm();
+  } finally {
+    formSubmitInProgress = false;
+    form.removeAttribute("aria-busy");
+    submitButton.disabled = storageWriteBlocked || !storageAvailable;
+    submitButton.textContent = editingSaleId === null ? "登録する" : "更新する";
+  }
 });
 
-// ページを開いたときに、日付の初期値と保存済みデータを準備します
-monthFilterInput.value = getCurrentMonthText();
-loadSales();
+// 起動処理は移行保存の完了を待ってから描画し、古い計算値を一瞬表示しないようにします。
+async function initializeApp() {
+  monthFilterInput.value = getCurrentMonthText();
+  await loadSales();
+  resetForm();
+  // 折りたたみUIは廃止しても、JSON互換のため保存済み設定は読み込みます
+  loadCollapsedSections();
+  renderDashboard();
 
-// 既存の売上配列形式は変えず、別キーにスキーマ情報だけを保存します
-if (!storageLoadBlocked) {
-  saveAppMeta(loadAppMeta());
+  const initialRequestedRoute = window.location.hash.replace(/^#\/?/, "");
+  const initialRoute = getCurrentRoute();
+  if (initialRequestedRoute !== initialRoute) {
+    window.location.replace(`#${initialRoute}`);
+  } else {
+    showRoute({ skipScroll: true });
+  }
 }
 
-resetForm();
-// 折りたたみUIは廃止しても、JSON互換のため保存済み設定は読み込みます
-loadCollapsedSections();
-renderDashboard();
-
-const initialRequestedRoute = window.location.hash.replace(/^#\/?/, "");
-const initialRoute = getCurrentRoute();
-
-if (initialRequestedRoute !== initialRoute) {
-  window.location.replace(`#${initialRoute}`);
-} else {
-  showRoute({ skipScroll: true });
-}
+initializeApp().catch(function (error) {
+  storageWriteBlocked = true;
+  setStorageDependentControlsDisabled(true);
+  showDataManagementStatus("起動時のデータ確認に失敗したため、書き込みを停止しました。ページを再読み込みしてください。", "error");
+  console.error(error);
+});

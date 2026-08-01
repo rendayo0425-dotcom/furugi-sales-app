@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>古着売上管理</title>
-  <link rel="manifest" href="manifest.json?v=20260801-1">
+  <link rel="manifest" href="manifest.json?v=20260801-2">
   <meta name="theme-color" content="#FF3B0A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="古着売上管理">
@@ -27,7 +27,7 @@
     }
   </style>
   <!-- 版番号を付け、iPhone PWAが更新前のCSSを再利用しないようにします -->
-  <link rel="stylesheet" href="style.css?v=20260801-1">
+  <link rel="stylesheet" href="style.css?v=20260801-2">
 </head>
 <body>
   <!-- 外部通信なしで使える、Lucideをもとにした共通アイコンです -->
@@ -439,7 +439,10 @@
     <a href="#data/list" data-nav-group="data"><svg class="ui-icon" aria-hidden="true"><use href="#icon-table"></use></svg><span>データ</span></a>
   </nav>
 
-  <script src="script.js?v=20260801-1"></script>
+  <!-- 計算と保存の共通処理を先に読み込み、画面処理から再利用します -->
+  <script src="core.js?v=20260801-2"></script>
+  <script src="storage.js?v=20260801-2"></script>
+  <script src="script.js?v=20260801-2"></script>
   <script>
     // Service Workerの登録に失敗しても、アプリ本体はそのまま利用できます
     if ("serviceWorker" in navigator) {
