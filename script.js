@@ -38,6 +38,13 @@ const editStatus = document.getElementById("editStatus");
 const submitButton = document.getElementById("submitButton");
 const cancelEditButton = document.getElementById("cancelEditButton");
 const formError = document.getElementById("formError");
+// 各入力欄の直下に表示するエラー欄を、入力欄のidで参照できるようにします
+const fieldErrorElements = new Map([
+  "saleDate", "purchaseDate", "salesChannel", "itemName",
+  "salePrice", "costPrice", "shippingFee", "feeRate"
+].map(function (fieldId) {
+  return [fieldId, document.getElementById(`${fieldId}Error`)];
+}));
 const exportCsvButton = document.getElementById("exportCsvButton");
 const exportMonthCsvButton = document.getElementById("exportMonthCsvButton");
 const deleteAllDataButton = document.getElementById("deleteAllDataButton");
@@ -182,6 +189,8 @@ let formSubmitInProgress = false;
 let externalStorageChangePending = false;
 let pendingDeleteUndo = null;
 let deleteUndoTimer = null;
+// 初回表示では見出しへ移動せず、2回目以降の画面遷移だけフォーカスします
+let lastShownRoute = null;
 
 // 編集中の商品idです。nullのときは新規登録モードです
 let editingSaleId = null;
@@ -239,6 +248,27 @@ function formatYen(value) {
 // 数字を「25.5%」のように小数1桁のパーセント表示へ変換します
 function formatPercent(value) {
   return `${value.toFixed(1)}%`;
+}
+
+// 利益の正負を色と文字の両方で伝え、赤字を色だけに依存させません
+function applyProfitState(element, amount, accessibleLabel = "") {
+  const numericAmount = Number(amount || 0);
+  element.classList.remove("profit-plus", "profit-minus", "profit-positive", "profit-negative", "profit-zero");
+  element.removeAttribute("data-loss-label");
+
+  if (numericAmount < 0) {
+    element.classList.add("profit-negative");
+    element.setAttribute("data-loss-label", "赤字");
+    element.setAttribute("aria-label", `${accessibleLabel || element.textContent}、赤字`);
+    return;
+  }
+
+  element.classList.add(numericAmount > 0 ? "profit-positive" : "profit-zero");
+  if (accessibleLabel) {
+    element.setAttribute("aria-label", accessibleLabel);
+  } else {
+    element.removeAttribute("aria-label");
+  }
 }
 
 // 今日の日付を「2026-06-02」のような入力しやすい形にします
@@ -437,22 +467,46 @@ function saveAppMeta(appMeta) {
 function clearFormErrors() {
   formError.style.display = "none";
   formError.innerHTML = "";
+
+  fieldErrorElements.forEach(function (errorElement, fieldId) {
+    const field = document.getElementById(fieldId);
+    if (!field || !errorElement) return;
+    field.removeAttribute("aria-invalid");
+    field.removeAttribute("aria-describedby");
+    errorElement.textContent = "";
+    errorElement.hidden = true;
+  });
 }
 
 // 入力エラーを日本語でまとめて表示します
 function showFormErrors(errors) {
+  clearFormErrors();
   const list = document.createElement("ul");
 
-  errors.forEach(function (errorText) {
+  errors.forEach(function (error) {
     const item = document.createElement("li");
-    item.textContent = errorText;
+    item.textContent = error.message;
     list.appendChild(item);
+
+    const field = document.getElementById(error.fieldId);
+    const errorElement = fieldErrorElements.get(error.fieldId);
+    if (field && errorElement) {
+      errorElement.textContent = error.message;
+      errorElement.hidden = false;
+      field.setAttribute("aria-invalid", "true");
+      field.setAttribute("aria-describedby", errorElement.id);
+    }
   });
 
   formError.innerHTML = "";
   formError.appendChild(list);
   formError.style.display = "block";
-  formError.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const firstInvalidField = document.getElementById(errors[0].fieldId);
+  if (firstInvalidField) {
+    firstInvalidField.focus({ preventScroll: true });
+    firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 // 登録・更新前に、必須項目と数値の範囲を確認します
@@ -460,35 +514,35 @@ function validateSaleInput(values) {
   const errors = [];
 
   if (!values.saleDate) {
-    errors.push("販売日を入力してください。");
+    errors.push({ fieldId: "saleDate", message: "販売日を入力してください。" });
   }
 
   if (values.purchaseDate && values.saleDate && calculateSaleDays(values.saleDate, values.purchaseDate) < 0) {
-    errors.push("仕入日は販売日以前の日付を入力してください。");
+    errors.push({ fieldId: "purchaseDate", message: "仕入日は販売日以前の日付を入力してください。" });
   }
 
   if (!values.salesChannel) {
-    errors.push("販路を選択してください。");
+    errors.push({ fieldId: "salesChannel", message: "販路を選択してください。" });
   }
 
   if (!values.itemName) {
-    errors.push("商品名を入力してください。");
+    errors.push({ fieldId: "itemName", message: "商品名を入力してください。" });
   }
 
   if (Number.isNaN(values.salePrice) || values.salePrice < 1) {
-    errors.push("売値は1円以上で入力してください。");
+    errors.push({ fieldId: "salePrice", message: "売値は1円以上で入力してください。" });
   }
 
   if (Number.isNaN(values.costPrice) || values.costPrice < 0) {
-    errors.push("仕入れ値は0円以上で入力してください。");
+    errors.push({ fieldId: "costPrice", message: "仕入れ値は0円以上で入力してください。" });
   }
 
   if (Number.isNaN(values.shippingFee) || values.shippingFee < 0) {
-    errors.push("送料は0円以上で入力してください。");
+    errors.push({ fieldId: "shippingFee", message: "送料は0円以上で入力してください。" });
   }
 
   if (Number.isNaN(values.feeRate) || values.feeRate < 0 || values.feeRate > 100) {
-    errors.push("販売手数料率は0〜100の範囲で入力してください。");
+    errors.push({ fieldId: "feeRate", message: "販売手数料率は0〜100の範囲で入力してください。" });
   }
 
   return errors;
@@ -726,7 +780,7 @@ function exportCsv() {
   }
 
   downloadCsv(sales, `sales-data-${getTodayText()}.csv`);
-  showDataManagementStatus(`全${sales.length}件のCSVを出力しました。`);
+  showDataManagementStatus(`全${sales.length}点のCSVを出力しました。`);
 }
 
 // 表示中の月に含まれるデータだけをCSVファイルとしてダウンロードします
@@ -743,7 +797,7 @@ function exportMonthCsv() {
   }
 
   downloadCsv(monthlySales, `sales-data-${selectedMonth}.csv`);
-  showDataManagementStatus(`${formatMonthLabel(selectedMonth)}の${monthlySales.length}件をCSVへ出力しました。`);
+  showDataManagementStatus(`${formatMonthLabel(selectedMonth)}の${monthlySales.length}点をCSVへ出力しました。`);
 }
 
 function countDuplicateSaleIds(targetSales) {
@@ -952,7 +1006,7 @@ async function confirmCsvImport() {
     ? { expectedRevision: pendingCsvImport.sourceRevision, replaceAll: true, metaPatch: { lastBackupAt: backupCreatedAt } }
     : { mergeLatest: true };
 
-  if (!await commitSales(nextSales, `CSVから${importedCount}件を読み込みました。`, commitOptions)) {
+  if (!await commitSales(nextSales, `CSVから${importedCount}点を読み込みました。`, commitOptions)) {
     return;
   }
 
@@ -1435,6 +1489,7 @@ function getRouteTitle(route) {
 function showRoute(options = {}) {
   const route = getCurrentRoute();
   const routeGroup = getRouteGroup(route);
+  const routeChangedAfterInitialDisplay = lastShownRoute !== null && lastShownRoute !== route;
 
   // 確認待ちデータがない直接アクセスは、管理画面へ安全に戻します
   if (route === "data/import-review" && !pendingCsvImport && !pendingJsonRestore) {
@@ -1450,7 +1505,9 @@ function showRoute(options = {}) {
     view.hidden = directRoute !== route && !groupedRoutes.includes(route) && !matchesPattern;
   });
 
-  routeTitle.textContent = getRouteTitle(route);
+  const titleText = getRouteTitle(route);
+  routeTitle.textContent = titleText;
+  document.title = `${route === "home" ? "ホーム" : titleText}｜古着売上管理`;
   bottomNavLinks.forEach(function (link) {
     const isActive = link.dataset.navGroup === routeGroup;
     link.classList.toggle("active", isActive);
@@ -1489,6 +1546,15 @@ function showRoute(options = {}) {
   if (!options.skipScroll) {
     window.scrollTo({ top: 0, behavior: "auto" });
   }
+
+  // 戻る・進むを含む画面切替だけ見出しへ移動し、月変更や再集計では移動しません
+  if (routeChangedAfterInitialDisplay) {
+    window.requestAnimationFrame(function () {
+      routeTitle.focus({ preventScroll: true });
+    });
+  }
+
+  lastShownRoute = route;
 }
 
 // 週間レポート用に、合計・平均・率をまとめて計算します
@@ -1558,7 +1624,7 @@ function getMonthTimingGroups(targetSales, monthText) {
 
 // AIに渡す集計行を、読みやすい1行にします
 function formatAiMetricsLine(label, metrics) {
-  return `${label}: 売上 ${formatYen(metrics.salesTotal)} / 利益 ${formatYen(metrics.profitTotal)} / 件数 ${metrics.count}件 / 平均売価 ${formatYen(metrics.averageSalePrice)} / 平均利益率 ${formatPercent(metrics.averageProfitRate)}`;
+  return `${label}: 売上 ${formatYen(metrics.salesTotal)} / 利益 ${formatYen(metrics.profitTotal)} / 販売商品数 ${metrics.count}点 / 平均売価 ${formatYen(metrics.averageSalePrice)} / 商品利益率（売上加重） ${formatPercent(metrics.averageProfitRate)}`;
 }
 
 // 月ごとの季節・給料日・ボーナスなど、AIに読ませたい参照文脈を作ります
@@ -1682,14 +1748,14 @@ function buildAiAnalysisText(targetSales) {
     `- 送料合計: ${formatYen(summary.shippingTotal)}`,
     `- 手数料合計: ${formatYen(summary.feeTotal)}`,
     `- 利益合計: ${formatYen(summary.profitTotal)}`,
-    `- 平均利益率: ${formatPercent(summary.averageRate)}`,
-    `- 粗利率: ${formatPercent(kpi.grossProfitRate)}`,
-    `- 登録件数: ${summary.count}件`,
+    `- 平均商品利益率（単純平均）: ${formatPercent(summary.averageRate)}`,
+    `- 商品利益率（売上加重）: ${formatPercent(kpi.grossProfitRate)}`,
+    `- 販売商品数: ${summary.count}点`,
     `- 平均売価: ${formatYen(kpi.averageSalePrice)}`,
     `- 平均原価: ${formatYen(kpi.averageCostPrice)}`,
     `- 平均送料: ${formatYen(kpi.averageShippingFee)}`,
     `- 平均利益: ${formatYen(kpi.averageProfit)}`,
-    `- 平均販売日数: ${formatAverageSaleDays(kpi.averageSaleDays)}`,
+    `- 平均販売日数（仕入日がある販売済み商品のみ）: ${formatAverageSaleDays(kpi.averageSaleDays)}`,
     "",
     "曜日別集計:",
     ...weekdayGroups.map(function (group) {
@@ -1731,7 +1797,8 @@ function renderAiAnalysisPreview() {
   // AIへ渡す文章と同じ対象月の数字を、画面上でも先に確認できるようにします
   aiSummarySales.textContent = formatYen(summary.salesTotal);
   aiSummaryProfit.textContent = formatYen(summary.profitTotal);
-  aiSummaryCount.textContent = `${summary.count}件`;
+  aiSummaryCount.textContent = `${summary.count}点`;
+  applyProfitState(aiSummaryProfit, summary.profitTotal, `利益 ${formatYen(summary.profitTotal)}`);
 
   if (filteredSales.length === 0) {
     aiAnalysisPreview.value = `${formatMonthLabel(monthFilterInput.value)}の売上データがありません。`;
@@ -1768,6 +1835,19 @@ async function copyAiAnalysisText() {
   if (filteredSales.length === 0) {
     renderAiAnalysisPreview();
     showAiCopyStatus("表示中の月にコピーできる売上データがありません。", true);
+    return;
+  }
+
+  const includesActualMemos = includeAiItemDetails.checked
+    && includeAiMemos.checked
+    && filteredSales.some(function (sale) {
+      return Boolean(String(sale.memo || "").trim());
+    });
+
+  // 実際のメモをコピーするときだけ、個人情報が含まれていないか利用者へ確認します
+  if (includesActualMemos && !confirm("メモに個人情報が含まれていないことを確認しましたか？")) {
+    copyAiAnalysisButton.focus();
+    showAiCopyStatus("コピーをキャンセルしました。メモ内容を確認してください。", true);
     return;
   }
 
@@ -1959,7 +2039,7 @@ async function loadSales() {
   const duplicateIdCount = countDuplicateSaleIds(normalizedSales);
   sales = ensureUniqueImportedIds(normalizedSales, []);
   quarantinedSales = nextQuarantinedSales;
-  if (duplicateIdCount > 0) recoveryEntries.push({ reasons: [`重複ID ${duplicateIdCount}件を画面内で再採番しました`], changedFields: {} });
+  if (duplicateIdCount > 0) recoveryEntries.push({ reasons: [`重複ID ${duplicateIdCount}点を画面内で再採番しました`], changedFields: {} });
   saveRecoveryLogBestEffort(recoveryEntries, sourceMeta.schemaVersion);
   storageLoadBlocked = false;
   exportJsonBackupButton.disabled = false;
@@ -2081,14 +2161,14 @@ async function downloadJsonBackup() {
     metaPatch: { lastBackupAt: backupCreatedAt }
   });
   if (saved) {
-    showDataManagementStatus(`画像を含む${sales.length}件の完全バックアップを作成しました。`);
+    showDataManagementStatus(`画像を含む${sales.length}点の完全バックアップを作成しました。`);
     renderBackupStatus();
   }
 }
 
 function validateBackupSale(sale, index) {
   const reasons = [];
-  const rowLabel = `${index + 1}件目`;
+  const rowLabel = `${index + 1}点目`;
   const salePrice = parseOptionalNumber(sale.salePrice);
   const costPrice = parseOptionalNumber(sale.costPrice);
   const shippingFee = parseOptionalNumber(sale.shippingFee);
@@ -2162,7 +2242,7 @@ function validateJsonBackup(backup) {
         }
 
         if (!imageValidation.ok) {
-          errors.push(`${index + 1}件目: 商品画像が不正です（${imageValidation.reason}）。`);
+          errors.push(`${index + 1}点目: 商品画像が不正です（${imageValidation.reason}）。`);
         }
 
         if (idKey && seenIds.has(idKey)) {
@@ -2173,7 +2253,7 @@ function validateJsonBackup(backup) {
       });
 
       if (duplicateIds.size > 0) {
-        errors.push(`売上データに重複IDが${duplicateIds.size}件あります。`);
+        errors.push(`売上データに重複IDが${duplicateIds.size}点あります。`);
       }
     }
 
@@ -2227,8 +2307,8 @@ function renderJsonImportReview() {
   csvReviewPanel.hidden = true;
   jsonReviewPanel.hidden = false;
   jsonReviewCreatedAt.textContent = formatBackupDate(pendingJsonRestore.backup.createdAt);
-  jsonReviewCount.textContent = `${pendingJsonRestore.backup.sales.length}件`;
-  jsonReviewImageCount.textContent = `${imageCount}件`;
+  jsonReviewCount.textContent = `${pendingJsonRestore.backup.sales.length}点`;
+  jsonReviewImageCount.textContent = `${imageCount}点`;
   confirmCsvImportButton.disabled = false;
   confirmCsvImportButton.textContent = "確認してJSONを復元する";
 }
@@ -2288,9 +2368,9 @@ function restoreJsonBackup(file) {
       };
       renderJsonImportReview();
       const excludedNote = validation.invalidSaleCount > 0
-        ? ` 修復不能な${validation.invalidSaleCount}件は復元後も隔離して保持します。`
+        ? ` 修復不能な${validation.invalidSaleCount}点は復元後も隔離して保持します。`
         : "";
-      showDataManagementStatus(`${backup.sales.length}件のJSONバックアップを検証しました。${excludedNote}内容を確認してください。`);
+      showDataManagementStatus(`${backup.sales.length}点のJSONバックアップを検証しました。${excludedNote}内容を確認してください。`);
       window.location.hash = "data/import-review";
     } finally {
       if (requestId === importReadGeneration) {
@@ -2354,7 +2434,7 @@ async function confirmJsonRestore() {
   resetForm();
   renderDashboard();
   finalizeJsonRestoreControls();
-  showDataManagementStatus(`${sales.length}件の売上データと設定を復元しました。`);
+  showDataManagementStatus(`${sales.length}点の売上データと設定を復元しました。`);
   renderBackupStatus();
   window.location.hash = "data/list";
 }
@@ -2490,6 +2570,7 @@ function resetForm() {
 
   if (getCurrentRoute() === "register") {
     routeTitle.textContent = "売上を登録";
+    document.title = "売上を登録｜古着売上管理";
   }
 }
 
@@ -2593,9 +2674,9 @@ function createSaleCard(sale) {
   compactNumbers.className = "sales-list-values";
 
   const compactNumberItems = [
-    ["売値", formatYen(sale.salePrice)],
-    ["利益", formatYen(sale.profit), sale.profit >= 0 ? "profit-plus" : "profit-minus"],
-    ["利益率", formatPercent(sale.profitRate), sale.profit >= 0 ? "profit-plus" : "profit-minus"]
+    ["売値", formatYen(sale.salePrice), null],
+    ["利益", formatYen(sale.profit), sale.profit],
+    ["利益率", formatPercent(sale.profitRate), sale.profitRate]
   ];
 
   compactNumberItems.forEach(function (item) {
@@ -2608,8 +2689,8 @@ function createSaleCard(sale) {
     const value = document.createElement("strong");
     value.textContent = item[1];
 
-    if (item[2]) {
-      value.className = item[2];
+    if (item[2] !== null) {
+      applyProfitState(value, item[2], `${sale.itemName}の${item[0]} ${item[1]}`);
     }
 
     box.append(label, value);
@@ -2673,6 +2754,8 @@ function renderSalePlaceholderRoute(route) {
   placeholderSalePrice.textContent = formatYen(sale.salePrice);
   placeholderSaleProfit.textContent = formatYen(sale.profit);
   placeholderSaleProfitRate.textContent = formatPercent(Number(sale.profitRate || 0));
+  applyProfitState(placeholderSaleProfit, sale.profit, `${sale.itemName}の利益 ${formatYen(sale.profit)}`);
+  applyProfitState(placeholderSaleProfitRate, sale.profitRate, `${sale.itemName}の商品利益率 ${formatPercent(Number(sale.profitRate || 0))}`);
   detailSaleDate.textContent = formatDateSlash(sale.saleDate);
   detailPurchaseDate.textContent = formatDateSlash(sale.purchaseDate);
   detailSaleDays.textContent = formatSaleDays(saleDays);
@@ -2696,6 +2779,8 @@ function renderHome(filteredSales) {
   homeProfit.textContent = formatYen(summary.profitTotal);
   // ホームの利益率は、利益合計÷売上合計の加重利益率です
   homeProfitRate.textContent = formatPercent(summary.totalProfitRate);
+  applyProfitState(homeProfit, summary.profitTotal, `利益 ${formatYen(summary.profitTotal)}`);
+  applyProfitState(homeProfitRate, summary.totalProfitRate, `商品利益率 ${formatPercent(summary.totalProfitRate)}`);
   homeMedianSaleDays.textContent = speed.median === null
     ? "-"
     : `${Number.isInteger(speed.median) ? speed.median : speed.median.toFixed(1)}日`;
@@ -2777,7 +2862,9 @@ function renderTotalSummary(filteredSales) {
   totalFee.textContent = formatYen(summary.feeTotal);
   totalProfit.textContent = formatYen(summary.profitTotal);
   averageProfitRate.textContent = formatPercent(summary.averageRate);
-  summaryCount.textContent = `${summary.count}件`;
+  summaryCount.textContent = `${summary.count}点`;
+  applyProfitState(totalProfit, summary.profitTotal, `利益 ${formatYen(summary.profitTotal)}`);
+  applyProfitState(averageProfitRate, summary.averageRate, `平均商品利益率（単純平均） ${formatPercent(summary.averageRate)}`);
 }
 
 // 選択中の月のKPIを画面に表示します
@@ -2795,6 +2882,8 @@ function renderKpiSummary(filteredSales) {
   averageDeposit.textContent = formatYen(kpi.averageDeposit);
   averageSaleDays.textContent = formatAverageSaleDays(kpi.averageSaleDays);
   grossProfitRate.textContent = formatPercent(kpi.grossProfitRate);
+  applyProfitState(averageProfit, kpi.averageProfit, `平均利益 ${formatYen(kpi.averageProfit)}`);
+  applyProfitState(grossProfitRate, kpi.grossProfitRate, `商品利益率（売上加重） ${formatPercent(kpi.grossProfitRate)}`);
 }
 
 // 選択中の月を4週に分けて、週ごとのレポートを表示します
@@ -2807,7 +2896,9 @@ function renderWeeklyReport(filteredSales) {
   weeklySummarySales.textContent = formatYen(monthlyMetrics.salesTotal);
   weeklySummaryProfit.textContent = formatYen(monthlyMetrics.profitTotal);
   weeklySummaryRate.textContent = formatPercent(monthlyMetrics.averageProfitRate);
-  weeklySummaryCount.textContent = `${monthlyMetrics.count}件`;
+  weeklySummaryCount.textContent = `${monthlyMetrics.count}点`;
+  applyProfitState(weeklySummaryProfit, monthlyMetrics.profitTotal, `利益合計 ${formatYen(monthlyMetrics.profitTotal)}`);
+  applyProfitState(weeklySummaryRate, monthlyMetrics.averageProfitRate, `商品利益率 ${formatPercent(monthlyMetrics.averageProfitRate)}`);
   weeklyReportList.innerHTML = "";
 
   weeklyRanges.forEach(function (range) {
@@ -2837,8 +2928,8 @@ function renderWeeklyReport(filteredSales) {
 
     const mainItems = [
       ["売上", formatYen(metrics.salesTotal)],
-      ["利益", formatYen(metrics.profitTotal), metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus"],
-      ["件数", `${metrics.count}件`]
+      ["利益", formatYen(metrics.profitTotal), metrics.profitTotal],
+      ["販売商品数", `${metrics.count}点`, null]
     ];
 
     mainItems.forEach(function (item) {
@@ -2851,8 +2942,8 @@ function renderWeeklyReport(filteredSales) {
       const value = document.createElement("strong");
       value.textContent = item[1];
 
-      if (item[2]) {
-        value.className = item[2];
+      if (item[2] !== undefined && item[2] !== null) {
+        applyProfitState(value, item[2], `第${range.weekNumber}週の${item[0]} ${item[1]}`);
       }
 
       box.append(label, value);
@@ -2866,8 +2957,8 @@ function renderWeeklyReport(filteredSales) {
 
     const detailItems = [
       ["平均売価", formatYen(metrics.averageSalePrice)],
-      ["平均利益", formatYen(metrics.averageProfit)],
-      ["利益率", formatPercent(metrics.averageProfitRate), "profit-plus"],
+      ["平均利益", formatYen(metrics.averageProfit), metrics.averageProfit],
+      ["商品利益率（売上加重）", formatPercent(metrics.averageProfitRate), metrics.averageProfitRate],
       ["原価率", formatPercent(metrics.costRate)],
       ["送料率", formatPercent(metrics.shippingRate)],
       ["手数料率", formatPercent(metrics.feeRate)],
@@ -2884,8 +2975,8 @@ function renderWeeklyReport(filteredSales) {
       const value = document.createElement("strong");
       value.textContent = item[1];
 
-      if (item[2]) {
-        value.className = item[2];
+      if (item[2] !== undefined) {
+        applyProfitState(value, item[2], `第${range.weekNumber}週の${item[0]} ${item[1]}`);
       }
 
       box.append(label, value);
@@ -2910,10 +3001,10 @@ function renderDailySales(filteredSales) {
 
   dailySummarySales.textContent = formatYen(summary.salesTotal);
   dailySummaryProfit.textContent = formatYen(summary.profitTotal);
-  dailySummaryCount.textContent = `${summary.count}件`;
+  dailySummaryCount.textContent = `${summary.count}点`;
   dailySummarySales.setAttribute("aria-label", `${formatMonthLabel(monthFilterInput.value)}の売上合計 ${formatYen(summary.salesTotal)}`);
-  dailySummaryProfit.setAttribute("aria-label", `${formatMonthLabel(monthFilterInput.value)}の利益合計 ${formatYen(summary.profitTotal)}`);
-  dailySummaryCount.setAttribute("aria-label", `${formatMonthLabel(monthFilterInput.value)}の登録件数 ${summary.count}件`);
+  applyProfitState(dailySummaryProfit, summary.profitTotal, `${formatMonthLabel(monthFilterInput.value)}の利益合計 ${formatYen(summary.profitTotal)}`);
+  dailySummaryCount.setAttribute("aria-label", `${formatMonthLabel(monthFilterInput.value)}の販売商品数 ${summary.count}点`);
   dailySalesList.innerHTML = "";
 
   if (dailyGroups.length === 0) {
@@ -2949,13 +3040,12 @@ function renderDailySales(filteredSales) {
     salesValue.setAttribute("aria-label", `${dayLabel}の売上合計 ${formatYen(metrics.salesTotal)}`);
 
     const profitValue = document.createElement("strong");
-    profitValue.className = metrics.profitTotal >= 0 ? "profit-plus" : "profit-minus";
     profitValue.textContent = formatYen(metrics.profitTotal);
-    profitValue.setAttribute("aria-label", `${dayLabel}の利益合計 ${formatYen(metrics.profitTotal)}`);
+    applyProfitState(profitValue, metrics.profitTotal, `${dayLabel}の利益合計 ${formatYen(metrics.profitTotal)}`);
 
     const countValue = document.createElement("strong");
-    countValue.textContent = `${metrics.count}件`;
-    countValue.setAttribute("aria-label", `${dayLabel}の登録件数 ${metrics.count}件`);
+    countValue.textContent = `${metrics.count}点`;
+    countValue.setAttribute("aria-label", `${dayLabel}の販売商品数 ${metrics.count}点`);
 
     // 日別売上は日々確認しやすいよう、指定された3項目だけを表示します
     card.append(dateArea, salesValue, profitValue, countValue);
@@ -3046,9 +3136,9 @@ function renderChannelSummary(filteredSales) {
       ["原価", formatYen(result.summary.costTotal)],
       ["送料", formatYen(result.summary.shippingTotal)],
       ["手数料", formatYen(result.summary.feeTotal)],
-      ["利益", formatYen(result.summary.profitTotal), "channel-profit-row"],
-      ["加重利益率", formatPercent(result.summary.totalProfitRate), "channel-profit-row"],
-      ["件数", `${result.summary.count}件`]
+      ["利益", formatYen(result.summary.profitTotal), "channel-profit-row", result.summary.profitTotal],
+      ["商品利益率（売上加重）", formatPercent(result.summary.totalProfitRate), "channel-profit-row", result.summary.totalProfitRate],
+      ["販売商品数", `${result.summary.count}点`]
     ];
 
     numberItems.forEach(function (numberItem) {
@@ -3063,6 +3153,9 @@ function renderChannelSummary(filteredSales) {
 
       const value = document.createElement("dd");
       value.textContent = numberItem[1];
+      if (numberItem[3] !== undefined) {
+        applyProfitState(value, numberItem[3], `${result.channelName}の${numberItem[0]} ${numberItem[1]}`);
+      }
       row.append(label, value);
       numberGrid.appendChild(row);
     });
@@ -3085,6 +3178,11 @@ function renderChannelSummary(filteredSales) {
 
     const comparisonValue = document.createElement("strong");
     comparisonValue.textContent = formatPercent(result.summary.totalProfitRate);
+    applyProfitState(
+      comparisonValue,
+      result.summary.totalProfitRate,
+      `${result.channelName}の商品利益率（売上加重） ${formatPercent(result.summary.totalProfitRate)}`
+    );
     comparisonRow.append(comparisonName, comparisonTrack, comparisonValue);
     channelRateComparison.appendChild(comparisonRow);
   });
@@ -3100,6 +3198,11 @@ function renderChannelSummary(filteredSales) {
   overallTrack.appendChild(overallBar);
   const overallValue = document.createElement("strong");
   overallValue.textContent = formatPercent(overallSummary.totalProfitRate);
+  applyProfitState(
+    overallValue,
+    overallSummary.totalProfitRate,
+    `全体の商品利益率（売上加重） ${formatPercent(overallSummary.totalProfitRate)}`
+  );
   overallRow.append(overallName, overallTrack, overallValue);
   channelRateComparison.appendChild(overallRow);
 }
@@ -3245,7 +3348,9 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
 
   const profitLine = createSvgElement("polyline", {
     points: profitPoints.join(" "),
-    class: "monthly-profit-line"
+    class: values.some(function (value) { return value.profit < 0; })
+      ? "monthly-profit-line has-loss"
+      : "monthly-profit-line"
   });
   monthlyChart.appendChild(profitLine);
 
@@ -3256,10 +3361,10 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
       cx: centerX,
       cy: profitY,
       r: 4,
-      class: "monthly-profit-point"
+      class: value.profit < 0 ? "monthly-profit-point is-loss" : "monthly-profit-point"
     });
     const pointTitle = createSvgElement("title");
-    pointTitle.textContent = `${value.month}月 利益 ${formatYen(value.profit)}`;
+    pointTitle.textContent = `${value.month}月 利益 ${formatYen(value.profit)}${value.profit < 0 ? " 赤字" : ""}`;
     point.appendChild(pointTitle);
     monthlyChart.appendChild(point);
   });
@@ -3272,7 +3377,7 @@ function renderMonthlyChart(selectedYear, monthlyGroups) {
     populatedValues.length === 0
       ? `${selectedYear}年の売上データはありません`
       : `${selectedYear}年の月別売上と利益。${populatedValues.map(function (value) {
-        return `${value.month}月、売上${formatYen(value.sales)}、利益${formatYen(value.profit)}`;
+        return `${value.month}月、売上${formatYen(value.sales)}、利益${formatYen(value.profit)}${value.profit < 0 ? "、赤字" : ""}`;
       }).join("。")}`
   );
 }
@@ -3308,9 +3413,9 @@ function renderMonthlySummary() {
     numberGrid.className = "monthly-number-grid";
     const numberItems = [
       ["売上", formatYen(summary.salesTotal)],
-      ["利益", formatYen(summary.profitTotal), "monthly-strong"],
-      ["利益率", formatPercent(summary.totalProfitRate), "monthly-strong"],
-      ["件数", `${summary.count}件`]
+      ["利益", formatYen(summary.profitTotal), "monthly-strong", summary.profitTotal],
+      ["商品利益率（売上加重）", formatPercent(summary.totalProfitRate), "monthly-strong", summary.totalProfitRate],
+      ["販売商品数", `${summary.count}点`]
     ];
 
     numberItems.forEach(function (numberItem) {
@@ -3323,6 +3428,9 @@ function renderMonthlySummary() {
 
       if (numberItem[2]) {
         value.className = numberItem[2];
+      }
+      if (numberItem[3] !== undefined) {
+        applyProfitState(value, numberItem[3], `${formatMonthLabel(monthlyGroup.month)}の${numberItem[0]} ${numberItem[1]}`);
       }
 
       box.append(label, value);
@@ -3343,7 +3451,7 @@ function renderMonthlySummary() {
 // 登録済み一覧を画面に描画します
 function renderSalesList(filteredSales) {
   salesList.innerHTML = "";
-  itemCount.textContent = `${filteredSales.length}件`;
+  itemCount.textContent = `${filteredSales.length}点`;
   emptyMessage.style.display = filteredSales.length === 0 ? "block" : "none";
 
   filteredSales.forEach(function (sale) {

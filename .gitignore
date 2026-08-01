@@ -1,0 +1,6 @@
+# 依存パッケージは各環境で npm install して再作成します。
+node_modules/
+
+# Playwright が生成するテスト結果・HTMLレポートは管理対象外です。
+test-results/
+playwright-report/

@@ -12,8 +12,8 @@
   /* 通常サイズの文字でも白背景に対してAAを満たす、操作用の濃いオレンジです */
   --app-accent-strong: #c72d07;
   --app-accent-dark: #c72d07;
-  --app-success: #0b963f;
-  --app-danger: #c62828;
+  --app-success: #08752f;
+  --app-danger: #a61b13;
   --app-text: #11151d;
   --app-muted: #626975;
   --app-border: #dfe2e6;
@@ -62,6 +62,11 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+#routeTitle:focus-visible {
+  outline: 3px solid var(--app-accent);
+  outline-offset: 5px;
 }
 
 html,
@@ -618,6 +623,35 @@ body {
   border-radius: 5px;
 }
 
+/* 入力欄ごとのエラーは、上部概要と同じ内容を該当項目の直下にも表示します */
+.field-error {
+  margin: -1px 20px 0 210px;
+  padding: 7px 12px 10px;
+  color: var(--app-danger);
+  background: #fff4f2;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.new-sales-form [aria-invalid="true"] {
+  border-color: var(--app-danger);
+  box-shadow: 0 0 0 2px rgba(166, 27, 19, 0.12);
+}
+
+.new-sales-form .input-wrap:has(input[aria-invalid="true"]) {
+  border-color: var(--app-danger);
+  box-shadow: 0 0 0 2px rgba(166, 27, 19, 0.12);
+}
+
+.analysis-kpi-grid article small {
+  display: block;
+  margin-top: 10px;
+  color: var(--app-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 /* 分析概要 */
 .analysis-tabs {
   display: grid;
@@ -826,6 +860,8 @@ body {
   }
 
   .home-summary {
+    /* 文字を拡大した場合は、3列から自動的に1列へ切り替えて重なりを防ぎます。 */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
     padding: 16px 10px;
   }
 
@@ -840,6 +876,8 @@ body {
 
   .home-summary-item strong {
     font-size: clamp(1.08rem, 5.2vw, 1.45rem);
+    line-height: 1.15;
+    white-space: normal;
   }
 
   .home-insight-grid {
@@ -2696,12 +2734,41 @@ button:active {
   font-size: 15px;
 }
 
-.profit-plus {
-  color: #146c5f;
+.profit-plus,
+.profit-positive {
+  color: var(--app-success);
 }
 
-.profit-minus {
-  color: #b42318;
+.profit-minus,
+.profit-negative {
+  color: var(--app-danger);
+}
+
+.profit-zero {
+  color: var(--app-text);
+}
+
+/* 赤字は色だけでなく、金額の横の短い文字でも明示します */
+.profit-negative::after {
+  content: " " attr(data-loss-label);
+  font-size: 0.68em;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.analysis-total-list .profit-row dd.profit-positive,
+.analysis-kpi-grid .kpi-profit strong.profit-positive {
+  color: var(--app-success);
+}
+
+.analysis-total-list .profit-row dd.profit-negative,
+.analysis-kpi-grid .kpi-profit strong.profit-negative {
+  color: var(--app-danger);
+}
+
+.analysis-total-list .profit-row dd.profit-zero,
+.analysis-kpi-grid .kpi-profit strong.profit-zero {
+  color: var(--app-text);
 }
 
 .sale-memo {
@@ -3573,6 +3640,7 @@ body {
     height: 46px;
     font-size: 16px;
   }
+
 }
 
 /* ===== 第3段階: 月別・AI分析・売上データ一覧 ===== */
@@ -3715,6 +3783,14 @@ body {
   fill: var(--profit);
   stroke: #fff;
   stroke-width: 2;
+}
+
+.monthly-profit-line.has-loss {
+  stroke: var(--danger);
+}
+
+.monthly-profit-point.is-loss {
+  fill: var(--danger);
 }
 
 .monthly-chart-empty-title {
@@ -4871,5 +4947,29 @@ body {
   .json-review-card dl > div:last-child {
     padding-bottom: 0;
     border-bottom: 0;
+  }
+}
+
+/* ===== 第3段階: 利益表示と個別入力エラーの最終上書き ===== */
+/* 旧画面の色指定より後に置き、正数・赤字・0円を全画面で同じ意味にします */
+.app-shell .profit-positive {
+  color: var(--app-success) !important;
+}
+
+.app-shell .profit-negative {
+  color: var(--app-danger) !important;
+}
+
+.app-shell .profit-zero {
+  color: var(--app-text) !important;
+}
+
+@media (max-width: 768px) {
+  .new-sales-form .field-error {
+    width: auto;
+    max-width: none;
+    margin: -1px 14px 0;
+    padding: 6px 10px 9px;
+    font-size: 0.82rem;
   }
 }

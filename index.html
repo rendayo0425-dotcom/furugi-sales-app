@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>古着売上管理</title>
-  <link rel="manifest" href="manifest.json?v=20260801-3">
+  <link rel="manifest" href="manifest.json?v=20260801-4">
   <meta name="theme-color" content="#FF3B0A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="古着売上管理">
@@ -27,7 +27,7 @@
     }
   </style>
   <!-- 版番号を付け、iPhone PWAが更新前のCSSを再利用しないようにします -->
-  <link rel="stylesheet" href="style.css?v=20260801-3">
+  <link rel="stylesheet" href="style.css?v=20260801-4">
 </head>
 <body>
   <!-- 外部通信なしで使える、Lucideをもとにした共通アイコンです -->
@@ -50,7 +50,7 @@
   <main class="app-shell">
     <!-- 月入力は全画面で共有し、同じidを複数作らないようにします -->
     <header class="app-header">
-      <h1 id="routeTitle">古着売上管理</h1>
+      <h1 id="routeTitle" tabindex="-1">古着売上管理</h1>
       <label class="global-month-control" for="monthFilter">
         <svg class="ui-icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>
         <span class="sr-only">表示する月</span>
@@ -74,18 +74,18 @@
         <h2 id="homeSummaryTitle" class="sr-only">選択中の月の主要実績</h2>
         <div class="home-summary-item"><span>売上</span><strong id="homeSales">0円</strong></div>
         <div class="home-summary-item"><span>利益</span><strong id="homeProfit">0円</strong></div>
-        <div class="home-summary-item"><span>利益率</span><strong id="homeProfitRate">0.0%</strong></div>
+        <div class="home-summary-item"><span>商品利益率</span><strong id="homeProfitRate">0.0%</strong></div>
       </section>
 
       <div class="home-insight-grid">
         <section class="surface insight-card speed-card">
-          <h2>販売速度</h2>
+          <h2>売れた商品の販売日数</h2>
           <div class="speed-primary"><span>販売日数中央値</span><strong id="homeMedianSaleDays">-</strong></div>
           <dl class="speed-rates">
             <div><dt>30日以内</dt><dd id="homeWithin30Rate">-</dd></div>
             <div><dt>90日以内</dt><dd id="homeWithin90Rate">-</dd></div>
           </dl>
-          <p id="homeSpeedNote">仕入日がある商品を対象に集計します。</p>
+          <p id="homeSpeedNote">仕入日がある販売済み商品だけを対象とし、現在庫は含みません。</p>
         </section>
 
         <section class="surface recent-card">
@@ -123,7 +123,9 @@
 
         <form id="salesForm" class="form new-sales-form" novalidate>
           <label class="form-row" for="saleDate"><span>販売日 <em>必須</em></span><input id="saleDate" type="date" required></label>
+          <p id="saleDateError" class="field-error" hidden></p>
           <label class="form-row" for="purchaseDate"><span>仕入日 <small>任意</small></span><input id="purchaseDate" type="date"></label>
+          <p id="purchaseDateError" class="field-error" hidden></p>
           <label class="form-row" for="salesChannel">
             <span>販路 <em>必須</em></span>
             <select id="salesChannel" required>
@@ -133,7 +135,9 @@
               <option value="ラクマ">ラクマ</option>
             </select>
           </label>
+          <p id="salesChannelError" class="field-error" hidden></p>
           <label class="form-row" for="itemName"><span>商品名 <em>必須</em></span><input id="itemName" type="text" placeholder="例: Levi's 501 デニム" required></label>
+          <p id="itemNameError" class="field-error" hidden></p>
 
           <div class="form-row image-form-row">
             <span>商品画像 <small>任意</small></span>
@@ -149,9 +153,13 @@
           </div>
 
           <label class="form-row" for="salePrice"><span>売値 <em>必須</em></span><span class="input-wrap"><input id="salePrice" type="number" min="1" step="1" placeholder="9800" required><span>円</span></span></label>
-          <label class="form-row" for="costPrice"><span>仕入れ値 <small>任意</small></span><span class="input-wrap"><input id="costPrice" type="number" min="0" step="1" placeholder="2380" required><span>円</span></span></label>
-          <label class="form-row" for="shippingFee"><span>送料 <small>任意</small></span><span class="input-wrap"><input id="shippingFee" type="number" min="0" step="1" placeholder="210" required><span>円</span></span></label>
-          <label class="form-row" for="feeRate"><span>販売手数料率 <small>任意</small></span><span class="input-wrap"><input id="feeRate" type="number" min="0" step="0.1" value="10" required><span>%</span></span></label>
+          <p id="salePriceError" class="field-error" hidden></p>
+          <label class="form-row" for="costPrice"><span>仕入れ値 <small>任意</small></span><span class="input-wrap"><input id="costPrice" type="number" min="0" step="1" placeholder="2380"><span>円</span></span></label>
+          <p id="costPriceError" class="field-error" hidden></p>
+          <label class="form-row" for="shippingFee"><span>送料 <small>任意</small></span><span class="input-wrap"><input id="shippingFee" type="number" min="0" step="1" placeholder="210"><span>円</span></span></label>
+          <p id="shippingFeeError" class="field-error" hidden></p>
+          <label class="form-row" for="feeRate"><span>販売手数料率 <small>任意</small></span><span class="input-wrap"><input id="feeRate" type="number" min="0" step="0.1" value="10"><span>%</span></span></label>
+          <p id="feeRateError" class="field-error" hidden></p>
           <label class="form-row memo-row" for="memo"><span>メモ <small>任意</small></span><textarea id="memo" rows="4" maxlength="200" placeholder="商品の状態や販売時の補足"></textarea></label>
 
           <div class="form-actions">
@@ -181,8 +189,8 @@
           <div><dt>送料</dt><dd id="totalShipping">0円</dd></div>
           <div><dt>手数料</dt><dd id="totalFee">0円</dd></div>
           <div class="profit-row"><dt>利益</dt><dd id="totalProfit">0円</dd></div>
-          <div><dt>平均利益率</dt><dd id="averageProfitRate">0.0%</dd></div>
-          <div><dt>登録件数</dt><dd id="summaryCount">0件</dd></div>
+          <div><dt>平均商品利益率（単純平均）</dt><dd id="averageProfitRate">0.0%</dd></div>
+          <div><dt>販売商品数</dt><dd id="summaryCount">0点</dd></div>
         </dl>
       </section>
 
@@ -195,8 +203,8 @@
           <article><span>原価率</span><strong id="kpiCostRate">0.0%</strong></article>
           <article><span>送料率</span><strong id="kpiShippingRate">0.0%</strong></article>
           <article><span>手数料率</span><strong id="kpiFeeRate">0.0%</strong></article>
-          <article class="kpi-profit"><span>粗利率</span><strong id="grossProfitRate">0.0%</strong></article>
-          <article><span>平均販売日数</span><strong id="averageSaleDays">-</strong></article>
+          <article class="kpi-profit"><span>商品利益率（売上加重）</span><strong id="grossProfitRate">0.0%</strong></article>
+          <article><span>平均販売日数</span><strong id="averageSaleDays">-</strong><small>仕入日がある販売済み商品のみ</small></article>
           <article><span>平均原価</span><strong id="averageCostPrice">0円</strong></article>
           <article><span>平均送料</span><strong id="averageShippingFee">0円</strong></article>
           <article><span>平均手数料</span><strong id="averageFee">0円</strong></article>
@@ -214,8 +222,8 @@
         <div class="report-summary-grid">
           <div><span>売上合計</span><strong id="weeklySummarySales">0円</strong></div>
           <div><span>利益合計</span><strong id="weeklySummaryProfit">0円</strong></div>
-          <div><span>利益率</span><strong id="weeklySummaryRate">0.0%</strong></div>
-          <div><span>登録件数</span><strong id="weeklySummaryCount">0件</strong></div>
+          <div><span>商品利益率（売上加重）</span><strong id="weeklySummaryRate">0.0%</strong></div>
+          <div><span>販売商品数</span><strong id="weeklySummaryCount">0点</strong></div>
         </div>
       </section>
       <div id="weeklyReportList" class="weekly-report-list"></div>
@@ -229,10 +237,10 @@
       <section class="surface daily-summary-card" aria-label="選択中の月の日別売上合計">
         <div><span>売上</span><strong id="dailySummarySales">0円</strong></div>
         <div><span>利益</span><strong id="dailySummaryProfit">0円</strong></div>
-        <div><span>件数</span><strong id="dailySummaryCount">0件</strong></div>
+        <div><span>販売商品数</span><strong id="dailySummaryCount">0点</strong></div>
       </section>
       <section class="surface daily-table-card">
-        <div class="daily-table-heading" aria-hidden="true"><span>日付</span><span>売上</span><span>利益</span><span>件数</span></div>
+        <div class="daily-table-heading" aria-hidden="true"><span>日付</span><span>売上</span><span>利益</span><span>点数</span></div>
         <div id="dailySalesList" class="daily-sales-list"></div>
         <p class="daily-table-note">売上がある日だけを表示しています</p>
       </section>
@@ -254,7 +262,7 @@
       </section>
       <div id="channelSummaryList" class="channel-summary-list"></div>
       <section class="surface channel-rate-card">
-        <h2>加重利益率 比較</h2>
+        <h2>商品利益率（売上加重）比較</h2>
         <div id="channelRateComparison" class="channel-rate-comparison"></div>
       </section>
     </section>
@@ -288,14 +296,14 @@
       <p class="screen-description">選択中の月をAI分析用の文章へ整理します。</p>
       <div class="ai-options ai-option-cards">
         <label><input id="includeAiItemDetails" type="checkbox" checked><span>商品明細を含める</span></label>
-        <label><input id="includeAiMemos" type="checkbox" checked><span>メモを含める</span></label>
+        <label><input id="includeAiMemos" type="checkbox"><span>メモを含める</span></label>
       </div>
       <section class="surface ai-summary-card">
         <h2>統計プレビュー</h2>
         <div>
           <article><span>売上</span><strong id="aiSummarySales">0円</strong></article>
           <article><span>利益</span><strong id="aiSummaryProfit">0円</strong></article>
-          <article><span>取引件数</span><strong id="aiSummaryCount">0件</strong></article>
+          <article><span>販売商品数</span><strong id="aiSummaryCount">0点</strong></article>
         </div>
       </section>
       <section class="surface ai-preview-card">
@@ -319,7 +327,7 @@
           <a class="data-manage-link" href="#data/manage">CSV・バックアップ</a>
         </div>
       </div>
-      <div class="sales-list-count"><strong id="itemCount">0件</strong></div>
+      <div class="sales-list-count"><strong id="itemCount">0点</strong></div>
       <div id="salesList" class="sales-list"></div>
       <p id="emptyMessage" class="empty-message">選択中の月に登録された商品はありません。</p>
     </section>
@@ -429,7 +437,7 @@
       </section>
       <section id="jsonReviewPanel" class="surface json-review-card" hidden>
         <h2>JSON復元時の確認</h2>
-        <dl><div><dt>バックアップ日時</dt><dd id="jsonReviewCreatedAt">-</dd></div><div><dt>データ件数</dt><dd id="jsonReviewCount">0件</dd></div><div><dt>画像あり件数</dt><dd id="jsonReviewImageCount">0件</dd></div></dl>
+        <dl><div><dt>バックアップ日時</dt><dd id="jsonReviewCreatedAt">-</dd></div><div><dt>販売商品数</dt><dd id="jsonReviewCount">0点</dd></div><div><dt>画像あり商品数</dt><dd id="jsonReviewImageCount">0点</dd></div></dl>
         <p class="import-warning">現在の売上データと設定を、このバックアップの内容で置き換えます。</p>
       </section>
       <div class="import-review-actions">
@@ -453,14 +461,14 @@
   </nav>
 
   <!-- 計算と保存の共通処理を先に読み込み、画面処理から再利用します -->
-  <script src="core.js?v=20260801-3"></script>
-  <script src="storage.js?v=20260801-3"></script>
-  <script src="script.js?v=20260801-3"></script>
+  <script src="core.js?v=20260801-4"></script>
+  <script src="storage.js?v=20260801-4"></script>
+  <script src="script.js?v=20260801-4"></script>
   <script>
     // Service Workerの登録に失敗しても、アプリ本体はそのまま利用できます
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./service-worker.js?v=11-stage2", {
+        navigator.serviceWorker.register("./service-worker.js?v=20260801-4", {
           // SafariのHTTPキャッシュを使わず、Service Worker本体の更新を確認します。
           updateViaCache: "none"
         }).then(function (registration) {

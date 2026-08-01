@@ -2,8 +2,10 @@
   "name": "used-clothes-sales-app",
   "private": true,
   "scripts": {
+    "check:assets": "node scripts/check-asset-version.js",
     "test:unit": "node --test tests/unit/*.test.js",
-    "test": "npm run test:unit"
+    "test:e2e": "playwright test",
+    "test": "npm run check:assets && npm run test:unit"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.0"

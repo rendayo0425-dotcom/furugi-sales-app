@@ -1,8 +1,8 @@
 // キャッシュ名を変えると、古いキャッシュを削除して新しいファイルを使いやすくなります。
 // HTML/CSS/JSを大きく変更したのに反映されないときは、末尾の番号を1つ増やしてください。
 const CACHE_PREFIX = "used-clothes-sales-";
-const CACHE_NAME = "used-clothes-sales-v11-stage2";
-const ASSET_VERSION = "20260801-3";
+const CACHE_NAME = "used-clothes-sales-v12";
+const ASSET_VERSION = "20260801-4";
 
 // オフラインでも最低限アプリ画面を開けるように、基本ファイルだけ保存します。
 // 画像やCSVは容量が大きくなりやすいので、ここではキャッシュしません。
@@ -64,23 +64,26 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
+  // 同じ通信結果を画面表示とキャッシュ更新の両方で使います
+  const networkResponse = fetch(new Request(event.request, { cache: "no-store" }));
+  const cacheUpdate = networkResponse.then(function (response) {
+    if (!response || response.status !== 200 || response.type !== "basic") {
+      return undefined;
+    }
+
+    return caches.open(CACHE_NAME).then(function (cache) {
+      return cache.put(event.request, response.clone());
+    });
+  }).catch(function () {
+    // オフライン時の取得失敗はrespondWith側でキャッシュへ切り替えます
+    return undefined;
+  });
+
+  // キャッシュ書き込みが終わるまでService Workerを終了させないようにします
+  event.waitUntil(cacheUpdate);
   event.respondWith(
     // GitHub Pagesの短期HTTPキャッシュも回避し、通信時は必ず最新版を確認します。
-    fetch(new Request(event.request, { cache: "no-store" }))
-      .then(function (response) {
-        // 正常に取得できた同じサイト内のファイルだけキャッシュします。
-        if (!response || response.status !== 200 || response.type !== "basic") {
-          return response;
-        }
-
-        const responseCopy = response.clone();
-
-        caches.open(CACHE_NAME).then(function (cache) {
-          cache.put(event.request, responseCopy);
-        });
-
-        return response;
-      })
+    networkResponse
       .catch(function () {
         return caches.match(event.request).then(function (cachedResponse) {
           if (cachedResponse) {
