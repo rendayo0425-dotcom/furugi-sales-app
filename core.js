@@ -89,12 +89,160 @@
     return mergedRecords;
   }
 
+  // 表計算ソフトが文字列を数式として実行しないよう、危険な先頭文字だけを無害化します。
+  function protectCsvText(value) {
+    const text = String(value ?? "");
+    return /^[ \u3000]*(?:[=+\-@]|\t|\r|\n)/.test(text) ? `'${text}` : text;
+  }
+
+  function escapeCsvCell(value, protectFormula) {
+    const text = protectFormula ? protectCsvText(value) : String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  // 引用符の位置まで検査する状態機械で、CSV全体を安全に分解します。
+  function parseCsv(textValue) {
+    const text = String(textValue ?? "").replace(/^\uFEFF/, "");
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let state = "start";
+
+    function finishCell() {
+      row.push(cell);
+      cell = "";
+      state = "start";
+    }
+
+    function finishRow() {
+      finishCell();
+      if (row.some(function (value) { return value !== ""; })) rows.push(row);
+      row = [];
+    }
+
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (state === "quoted") {
+        if (char === '"' && next === '"') {
+          cell += '"';
+          index += 1;
+        } else if (char === '"') {
+          state = "afterQuote";
+        } else {
+          cell += char;
+        }
+      } else if (state === "afterQuote") {
+        if (char === ",") finishCell();
+        else if (char === "\n" || char === "\r") {
+          finishRow();
+          if (char === "\r" && next === "\n") index += 1;
+        } else {
+          return { ok: false, rows: [], error: "閉じた引用符の後に不正な文字があります。" };
+        }
+      } else if (char === '"') {
+        if (state !== "start" || cell !== "") return { ok: false, rows: [], error: "引用符の位置が正しくありません。" };
+        state = "quoted";
+      } else if (char === ",") {
+        finishCell();
+      } else if (char === "\n" || char === "\r") {
+        finishRow();
+        if (char === "\r" && next === "\n") index += 1;
+      } else {
+        cell += char;
+        state = "plain";
+      }
+    }
+
+    if (state === "quoted") return { ok: false, rows: [], error: "引用符が閉じられていません。" };
+    if (cell !== "" || row.length > 0 || state === "afterQuote") finishRow();
+    return { ok: true, rows, error: "" };
+  }
+
+  function getDuplicateHeaders(headers) {
+    const seen = new Set();
+    const duplicates = new Set();
+    headers.forEach(function (header) {
+      const name = String(header ?? "").trim();
+      if (seen.has(name)) duplicates.add(name || "空欄");
+      seen.add(name);
+    });
+    return Array.from(duplicates);
+  }
+
+  function estimateBase64Bytes(base64Text) {
+    const clean = String(base64Text || "").replace(/\s/g, "");
+    if (!clean) return 0;
+    const padding = clean.endsWith("==") ? 2 : clean.endsWith("=") ? 1 : 0;
+    return clean.length * 3 / 4 - padding;
+  }
+
+  // JSON復元では画像形式・Base64・実容量・先頭バイトをまとめて検査します。
+  function validateImageDataUrl(dataUrl, maxBytes) {
+    if (dataUrl === "" || dataUrl == null) return { ok: true, bytes: 0 };
+    if (typeof dataUrl !== "string") return { ok: false, reason: "画像データが文字列ではありません" };
+    const match = dataUrl.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+    if (!match || match[2].length % 4 !== 0) return { ok: false, reason: "画像形式またはBase64が正しくありません" };
+    const mime = match[1];
+    const base64 = match[2];
+    const bytes = estimateBase64Bytes(base64);
+    if (bytes > maxBytes) return { ok: false, reason: "画像容量が上限を超えています" };
+    let binary;
+    try {
+      binary = typeof atob === "function" ? atob(base64) : Buffer.from(base64, "base64").toString("binary");
+    } catch (error) {
+      return { ok: false, reason: "Base64を読み取れません" };
+    }
+    const codes = Array.from(binary.slice(0, 12), function (char) { return char.charCodeAt(0); });
+    const signatures = {
+      jpeg: codes[0] === 0xff && codes[1] === 0xd8 && codes[2] === 0xff,
+      png: codes[0] === 0x89 && codes[1] === 0x50 && codes[2] === 0x4e && codes[3] === 0x47,
+      webp: binary.slice(0, 4) === "RIFF" && binary.slice(8, 12) === "WEBP"
+    };
+    return signatures[mime] ? { ok: true, bytes, mime } : { ok: false, reason: "画像形式と内容が一致しません" };
+  }
+
+  function insertAt(records, record, index) {
+    const next = records.slice();
+    next.splice(Math.max(0, Math.min(Number(index) || 0, next.length)), 0, record);
+    return next;
+  }
+
+  function isFileSizeAllowed(size, maxBytes) {
+    return Number.isFinite(size) && size >= 0 && size <= maxBytes;
+  }
+
+  function getContainedSize(width, height, maxSize) {
+    const scale = Math.min(1, maxSize / width, maxSize / height);
+    return { width: Math.round(width * scale), height: Math.round(height * scale) };
+  }
+
+  function buildBackupPayload(options) {
+    return {
+      backupVersion: options.backupVersion,
+      createdAt: options.createdAt,
+      appMeta: { ...options.appMeta },
+      sales: mergeQuarantinedRecords(options.sales, options.quarantinedSales),
+      collapsedSections: { ...options.collapsedSections }
+    };
+  }
+
   const api = {
     calculateProfit,
     normalizeAppMeta,
     normalizeSaleRecord,
     partitionRecords,
-    mergeQuarantinedRecords
+    mergeQuarantinedRecords,
+    protectCsvText,
+    escapeCsvCell,
+    parseCsv,
+    getDuplicateHeaders,
+    estimateBase64Bytes,
+    validateImageDataUrl,
+    insertAt,
+    isFileSizeAllowed,
+    getContainedSize,
+    buildBackupPayload
   };
   global.UsedClothesCore = api;
 

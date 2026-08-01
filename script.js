@@ -125,6 +125,11 @@ const jsonReviewPanel = document.getElementById("jsonReviewPanel");
 const jsonReviewCreatedAt = document.getElementById("jsonReviewCreatedAt");
 const jsonReviewCount = document.getElementById("jsonReviewCount");
 const jsonReviewImageCount = document.getElementById("jsonReviewImageCount");
+const backupStatusHome = document.getElementById("backupStatusHome");
+const backupStatusDetail = document.getElementById("backupStatusDetail");
+const deleteUndoSnackbar = document.getElementById("deleteUndoSnackbar");
+const deleteUndoMessage = document.getElementById("deleteUndoMessage");
+const undoDeleteButton = document.getElementById("undoDeleteButton");
 
 // localStorageで使う保存名です
 const STORAGE_KEY = "usedClothesSales";
@@ -135,6 +140,12 @@ const STORAGE_PROBE_KEY = "usedClothesStorageProbe";
 const STORAGE_LOCK_NAME = "usedClothesSalesWrite";
 const APP_SCHEMA_VERSION = 2;
 const BACKUP_VERSION = 1;
+const CSV_MAX_BYTES = 5 * 1024 * 1024;
+const JSON_MAX_BYTES = 15 * 1024 * 1024;
+const IMAGE_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
+const IMAGE_PIXEL_MAX = 20 * 1000 * 1000;
+const IMAGE_OUTPUT_MAX_BYTES = 250 * 1024;
+const JSON_IMAGE_MAX_BYTES = 500 * 1024;
 
 // localStorageは存在確認だけでなく、実際に書込み・読込みできるか起動時に確認します
 const canUseStorage = typeof localStorage !== "undefined";
@@ -169,6 +180,8 @@ let appMeta = null;
 let currentRevision = 0;
 let formSubmitInProgress = false;
 let externalStorageChangePending = false;
+let pendingDeleteUndo = null;
+let deleteUndoTimer = null;
 
 // 編集中の商品idです。nullのときは新規登録モードです
 let editingSaleId = null;
@@ -482,9 +495,8 @@ function validateSaleInput(values) {
 }
 
 // CSV内でカンマや改行があっても崩れないように、値をダブルクォートで囲みます
-function escapeCsvValue(value) {
-  const text = String(value ?? "");
-  return `"${text.replace(/"/g, '""')}"`;
+function escapeCsvValue(value, protectFormula = false) {
+  return UsedClothesCore.escapeCsvCell(value, protectFormula);
 }
 
 // 1件の商品データをCSVの1行分に変換します
@@ -493,96 +505,21 @@ function saleToCsvRow(sale) {
     ? sale.saleDays
     : calculateSaleDays(sale.saleDate, sale.purchaseDate);
 
-  return [
-    sale.id,
-    sale.saleDate,
-    sale.purchaseDate || "",
-    sale.salesChannel,
-    sale.itemName,
-    sale.salePrice,
-    sale.costPrice,
-    sale.shippingFee,
-    sale.feeRate,
-    sale.fee,
-    sale.profit,
-    sale.profitRate,
-    formatSaleDays(saleDays),
-    sale.memo
-  ].map(escapeCsvValue).join(",");
+  const values = [sale.id, sale.saleDate, sale.purchaseDate || "", sale.salesChannel, sale.itemName,
+    sale.salePrice, sale.costPrice, sale.shippingFee, sale.feeRate, sale.fee, sale.profit,
+    sale.profitRate, formatSaleDays(saleDays), sale.memo];
+  const numericIndexes = new Set([5, 6, 7, 8, 9, 10, 11, 12]);
+  return values.map(function (value, index) {
+    return escapeCsvValue(value, !numericIndexes.has(index));
+  }).join(",");
 }
 
 // CSVテキストを作ります。Excelで開きやすいようにBOMも先頭に付けます
 function buildCsvText(targetSales = sales) {
-  const headerRow = csvHeaders.map(escapeCsvValue).join(",");
+  const headerRow = csvHeaders.map(function (header) { return escapeCsvValue(header, true); }).join(",");
   const dataRows = targetSales.map(saleToCsvRow);
 
   return `\uFEFF${[headerRow, ...dataRows].join("\n")}`;
-}
-
-// CSVの1行を配列へ変換します
-function parseCsvLine(line) {
-  const values = [];
-  let currentValue = "";
-  let isInQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const nextChar = line[index + 1];
-
-    if (char === '"' && isInQuotes && nextChar === '"') {
-      currentValue += '"';
-      index += 1;
-    } else if (char === '"') {
-      isInQuotes = !isInQuotes;
-    } else if (char === "," && !isInQuotes) {
-      values.push(currentValue);
-      currentValue = "";
-    } else {
-      currentValue += char;
-    }
-  }
-
-  values.push(currentValue);
-  return values;
-}
-
-// CSV全体を2次元配列へ変換します。引用符の中の改行も扱えるようにしています
-function parseCsvText(csvText) {
-  const rows = [];
-  let currentLine = "";
-  let isInQuotes = false;
-  const text = csvText.replace(/^\uFEFF/, "");
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const nextChar = text[index + 1];
-
-    if (char === '"' && isInQuotes && nextChar === '"') {
-      currentLine += char + nextChar;
-      index += 1;
-    } else if (char === '"') {
-      isInQuotes = !isInQuotes;
-      currentLine += char;
-    } else if ((char === "\n" || char === "\r") && !isInQuotes) {
-      if (currentLine.trim() !== "") {
-        rows.push(parseCsvLine(currentLine));
-      }
-
-      currentLine = "";
-
-      if (char === "\r" && nextChar === "\n") {
-        index += 1;
-      }
-    } else {
-      currentLine += char;
-    }
-  }
-
-  if (currentLine.trim() !== "") {
-    rows.push(parseCsvLine(currentLine));
-  }
-
-  return rows;
 }
 
 function getCsvValue(headerIndexes, row, headerName) {
@@ -693,8 +630,20 @@ function validateCsvRow(headerIndexes, row, rowNumber) {
 
 // 必須ヘッダーと各行を検証し、保存前のプレビュー用データを作ります
 function validateCsvText(csvText) {
-  const rows = parseCsvText(csvText);
-  const headers = rows[0] || [];
+  const parsed = UsedClothesCore.parseCsv(csvText);
+  if (!parsed.ok) {
+    return { sales: [], validCount: 0, warningCount: 0, invalidCount: 0, issues: [parsed.error], fatalError: true };
+  }
+  const rows = parsed.rows;
+  const headers = (rows[0] || []).map(function (header) { return String(header).trim(); });
+  const duplicateHeaders = UsedClothesCore.getDuplicateHeaders(headers);
+  if (duplicateHeaders.length > 0) {
+    return { sales: [], validCount: 0, warningCount: 0, invalidCount: Math.max(rows.length - 1, 0), issues: [`重複した列名があります: ${duplicateHeaders.join("、")}`], fatalError: true };
+  }
+  const invalidWidthRow = rows.slice(1).findIndex(function (row) { return row.length !== headers.length; });
+  if (invalidWidthRow >= 0) {
+    return { sales: [], validCount: 0, warningCount: 0, invalidCount: Math.max(rows.length - 1, 0), issues: [`${invalidWidthRow + 2}行目の列数が見出しと一致しません。`], fatalError: true };
+  }
   const requiredHeaders = ["販売日", "販路", "商品名", "売値"];
   const missingHeaders = requiredHeaders.filter(function (header) {
     return !headers.includes(header);
@@ -913,6 +862,11 @@ function clearPendingImportReview() {
 
 // CSVファイルは選択時に検証するだけで、確定ボタンを押すまで保存しません
 function stageCsvImport(file) {
+  if (!UsedClothesCore.isFileSizeAllowed(file.size, CSV_MAX_BYTES)) {
+    showDataManagementStatus("CSVは5MB以下のファイルを選択してください。", "error");
+    csvFileInput.value = "";
+    return;
+  }
   const reader = new FileReader();
   // ファイル選択後の別タブ更新を、置き換え確定時に見逃さないため開始時点を記録します。
   const sourceRevision = currentRevision;
@@ -983,6 +937,10 @@ async function confirmCsvImport() {
 
   const importMode = getSelectedCsvImportMode();
   const isReplaceMode = importMode === "replace";
+  const backupCreatedAt = isReplaceMode
+    ? downloadDestructiveBackup(pendingCsvImport.sourceRevision, "csv-replace")
+    : "";
+  if (isReplaceMode && !backupCreatedAt) return;
   const importedCount = pendingCsvImport.sales.length;
   const nextSales = isReplaceMode
     ? ensureUniqueImportedIds(pendingCsvImport.sales, [])
@@ -991,7 +949,7 @@ async function confirmCsvImport() {
       return [...safeImportedSales, ...latestSales];
     };
   const commitOptions = isReplaceMode
-    ? { expectedRevision: pendingCsvImport.sourceRevision, replaceAll: true }
+    ? { expectedRevision: pendingCsvImport.sourceRevision, replaceAll: true, metaPatch: { lastBackupAt: backupCreatedAt } }
     : { mergeLatest: true };
 
   if (!await commitSales(nextSales, `CSVから${importedCount}件を読み込みました。`, commitOptions)) {
@@ -999,6 +957,7 @@ async function confirmCsvImport() {
   }
 
   clearPendingCsvImport();
+  if (isReplaceMode) discardDeleteUndo();
   resetForm();
   renderDashboard();
   window.location.hash = "data/list";
@@ -1007,6 +966,10 @@ async function confirmCsvImport() {
 // 選択された画像を、localStorageに保存しやすい小さなJPEG画像へ変換します
 function resizeImage(file) {
   return new Promise(function (resolve, reject) {
+    if (!UsedClothesCore.isFileSizeAllowed(file.size, IMAGE_SOURCE_MAX_BYTES)) {
+      reject(new Error("画像は8MB以下のファイルを選択してください。"));
+      return;
+    }
     const reader = new FileReader();
 
     // FileReaderで、選択した画像ファイルをBase64文字列として読み込みます
@@ -1014,12 +977,20 @@ function resizeImage(file) {
       const image = new Image();
 
       image.onload = function () {
-        const maxWidth = 300;
-        const scale = Math.min(1, maxWidth / image.width);
-        const width = Math.round(image.width * scale);
-        const height = Math.round(image.height * scale);
+        if (image.width * image.height > IMAGE_PIXEL_MAX) {
+          reject(new Error("画像の画素数が大きすぎます。20メガピクセル以下の画像を選択してください。"));
+          return;
+        }
+        const containedSize = UsedClothesCore.getContainedSize(image.width, image.height, 300);
+        const width = containedSize.width;
+        const height = containedSize.height;
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
+
+        if (!context) {
+          reject(new Error("画像を変換できませんでした。別の画像を選択してください。"));
+          return;
+        }
 
         canvas.width = width;
         canvas.height = height;
@@ -1028,14 +999,20 @@ function resizeImage(file) {
         context.drawImage(image, 0, 0, width, height);
 
         // JPEG形式、画質0.7でBase64文字列に変換します
-        resolve(canvas.toDataURL("image/jpeg", 0.7));
+        const output = canvas.toDataURL("image/jpeg", 0.7);
+        const base64 = output.split(",")[1] || "";
+        if (UsedClothesCore.estimateBase64Bytes(base64) > IMAGE_OUTPUT_MAX_BYTES) {
+          reject(new Error("変換後の画像が250KBを超えました。別の画像を選択してください。"));
+          return;
+        }
+        resolve(output);
       };
 
-      image.onerror = reject;
+      image.onerror = function () { reject(new Error("画像を読み込めませんでした。")); };
       image.src = reader.result;
     };
 
-    reader.onerror = reject;
+    reader.onerror = function () { reject(new Error("画像ファイルを読み込めませんでした。")); };
     reader.readAsDataURL(file);
   });
 }
@@ -2022,13 +1999,65 @@ function downloadTextFile(text, fileName, mimeType) {
 
 // 商品画像と設定を含む、アプリ全体の完全バックアップを作ります
 function buildJsonBackup() {
-  return {
+  return UsedClothesCore.buildBackupPayload({
     backupVersion: BACKUP_VERSION,
     createdAt: new Date().toISOString(),
-    appMeta: loadAppMeta(),
+    appMeta: { ...appMeta },
     sales,
+    quarantinedSales,
     collapsedSections
-  };
+  });
+}
+
+function renderBackupStatus() {
+  const count = sales.length + quarantinedSales.length;
+  const now = Date.now();
+  const backupTime = Date.parse(appMeta?.lastBackupAt || "");
+  const changeTime = Date.parse(appMeta?.lastDataChangeAt || "");
+  let detail;
+  let shortText;
+  let level = "ok";
+
+  if (count === 0) {
+    shortText = "バックアップ対象のデータはありません";
+    detail = "売上データが登録されると、バックアップ時期をここで確認できます。";
+  } else if (!Number.isFinite(backupTime)) {
+    shortText = "バックアップを作成してください";
+    detail = "まだ完全バックアップがありません。画像を含むJSONバックアップを作成してください。";
+    level = "danger";
+  } else if ((now - backupTime) / 86400000 >= 30) {
+    shortText = "バックアップから30日以上経過しています";
+    detail = `最終バックアップ: ${formatBackupDate(appMeta.lastBackupAt)}。早めの作成をおすすめします。`;
+    level = "danger";
+  } else if (Number.isFinite(changeTime) && changeTime > backupTime) {
+    shortText = "バックアップ後にデータが更新されています";
+    detail = `最終バックアップ: ${formatBackupDate(appMeta.lastBackupAt)}。最新データを保存してください。`;
+    level = "warning";
+  } else if ((now - backupTime) / 86400000 >= 7) {
+    shortText = "バックアップから7日以上経過しています";
+    detail = `最終バックアップ: ${formatBackupDate(appMeta.lastBackupAt)}。定期バックアップの時期です。`;
+    level = "warning";
+  } else {
+    shortText = "バックアップは最新です";
+    detail = `最終バックアップ: ${formatBackupDate(appMeta.lastBackupAt)}`;
+  }
+
+  [backupStatusHome, backupStatusDetail].forEach(function (element, index) {
+    if (!element) return;
+    element.textContent = index === 0 ? shortText : detail;
+    element.dataset.level = level;
+  });
+}
+
+// 破壊操作の直前はrevisionを増やさず、現在状態のJSONだけを先にダウンロードします。
+function downloadDestructiveBackup(expectedRevision, suffix) {
+  if (currentRevision !== expectedRevision) {
+    showDataManagementStatus("別の画面でデータが更新されたため、操作を中止しました。再度ファイルを選択してください。", "error");
+    return "";
+  }
+  const backup = buildJsonBackup();
+  downloadTextFile(JSON.stringify(backup, null, 2), `used-clothes-before-${suffix}-${getTodayText()}.json`, "application/json;charset=utf-8");
+  return backup.createdAt;
 }
 
 async function downloadJsonBackup() {
@@ -2053,6 +2082,7 @@ async function downloadJsonBackup() {
   });
   if (saved) {
     showDataManagementStatus(`画像を含む${sales.length}件の完全バックアップを作成しました。`);
+    renderBackupStatus();
   }
 }
 
@@ -2125,9 +2155,14 @@ function validateJsonBackup(backup) {
       backup.sales.forEach(function (sale, index) {
         const reason = validateBackupSale(sale, index);
         const idKey = getSaleIdKey(sale.id);
+        const imageValidation = UsedClothesCore.validateImageDataUrl(sale.imageData || "", JSON_IMAGE_MAX_BYTES);
 
         if (reason) {
           invalidSaleReasons.push(reason);
+        }
+
+        if (!imageValidation.ok) {
+          errors.push(`${index + 1}件目: 商品画像が不正です（${imageValidation.reason}）。`);
         }
 
         if (idKey && seenIds.has(idKey)) {
@@ -2136,12 +2171,6 @@ function validateJsonBackup(backup) {
           seenIds.add(idKey);
         }
       });
-
-      if (invalidSaleReasons.length > 0) {
-        errors.push(
-          `売上データ${invalidSaleReasons.length}件が不正です。先頭の理由: ${invalidSaleReasons[0]}`
-        );
-      }
 
       if (duplicateIds.size > 0) {
         errors.push(`売上データに重複IDが${duplicateIds.size}件あります。`);
@@ -2189,7 +2218,7 @@ function renderJsonImportReview() {
     return;
   }
 
-  const imageCount = pendingJsonRestore.normalizedSales.filter(function (sale) {
+  const imageCount = pendingJsonRestore.backup.sales.filter(function (sale) {
     return Boolean(sale.imageData);
   }).length;
   importReviewFileName.textContent = pendingJsonRestore.fileName || "JSONバックアップ";
@@ -2198,7 +2227,7 @@ function renderJsonImportReview() {
   csvReviewPanel.hidden = true;
   jsonReviewPanel.hidden = false;
   jsonReviewCreatedAt.textContent = formatBackupDate(pendingJsonRestore.backup.createdAt);
-  jsonReviewCount.textContent = `${pendingJsonRestore.normalizedSales.length}件`;
+  jsonReviewCount.textContent = `${pendingJsonRestore.backup.sales.length}件`;
   jsonReviewImageCount.textContent = `${imageCount}件`;
   confirmCsvImportButton.disabled = false;
   confirmCsvImportButton.textContent = "確認してJSONを復元する";
@@ -2208,6 +2237,12 @@ function renderJsonImportReview() {
 function restoreJsonBackup(file) {
   if (!canUseStorage) {
     showDataManagementStatus("このブラウザではJSONバックアップを復元できません。", "error");
+    jsonBackupInput.value = "";
+    return;
+  }
+
+  if (!UsedClothesCore.isFileSizeAllowed(file.size, JSON_MAX_BYTES)) {
+    showDataManagementStatus("JSONバックアップは15MB以下のファイルを選択してください。", "error");
     jsonBackupInput.value = "";
     return;
   }
@@ -2242,17 +2277,20 @@ function restoreJsonBackup(file) {
       }
 
       const backup = parsed.value;
-      const normalizedSales = ensureUniqueImportedIds(backup.sales.map(function (sale, index) {
-        return normalizeSaleRecord(sale, Date.now() + index);
-      }), []);
+      const partitioned = normalizeValidSalesRecords(backup.sales);
+      const normalizedSales = ensureUniqueImportedIds(partitioned.sales, []);
       pendingJsonRestore = {
         backup,
         normalizedSales,
+        rawSales: backup.sales,
         fileName: file.name || "JSONバックアップ",
         sourceRevision
       };
       renderJsonImportReview();
-      showDataManagementStatus(`${normalizedSales.length}件のJSONバックアップを検証しました。内容を確認してください。`);
+      const excludedNote = validation.invalidSaleCount > 0
+        ? ` 修復不能な${validation.invalidSaleCount}件は復元後も隔離して保持します。`
+        : "";
+      showDataManagementStatus(`${backup.sales.length}件のJSONバックアップを検証しました。${excludedNote}内容を確認してください。`);
       window.location.hash = "data/import-review";
     } finally {
       if (requestId === importReadGeneration) {
@@ -2284,16 +2322,18 @@ async function confirmJsonRestore() {
     return;
   }
 
-  const { backup, normalizedSales } = pendingJsonRestore;
+  const { backup, normalizedSales, rawSales } = pendingJsonRestore;
+  const backupCreatedAt = downloadDestructiveBackup(pendingJsonRestore.sourceRevision, "json-restore");
+  if (!backupCreatedAt) return;
   const restoredMeta = {
     ...backup.appMeta,
     schemaVersion: APP_SCHEMA_VERSION,
     migratedAt: new Date().toISOString(),
     lastDataChangeAt: new Date().toISOString()
   };
-  const committed = await commitSales(normalizedSales, "", {
+  const committed = await commitSales(rawSales, "", {
     expectedRevision: pendingJsonRestore.sourceRevision,
-    metaPatch: restoredMeta,
+    metaPatch: { ...restoredMeta, lastBackupAt: backupCreatedAt },
     replaceAll: true
   });
   if (!committed) {
@@ -2309,11 +2349,13 @@ async function confirmJsonRestore() {
   collapsedSections = { ...backup.collapsedSections };
   storageLoadBlocked = false;
   pendingJsonRestore = null;
+  discardDeleteUndo();
   applyCollapsedSectionViews();
   resetForm();
   renderDashboard();
   finalizeJsonRestoreControls();
   showDataManagementStatus(`${sales.length}件の売上データと設定を復元しました。`);
+  renderBackupStatus();
   window.location.hash = "data/list";
 }
 
@@ -3324,15 +3366,47 @@ function renderDashboard() {
   renderAiAnalysisPreview();
   renderSalesList(visibleSales);
   monthCsvButtonLabel.textContent = `${formatMonthLabel(monthFilterInput.value)}をCSV出力`;
+  renderBackupStatus();
 
   if (getCurrentRoute().startsWith("data/sale/")) {
     renderSalePlaceholderRoute(getCurrentRoute());
   }
 }
 
+function discardDeleteUndo() {
+  if (deleteUndoTimer) clearTimeout(deleteUndoTimer);
+  deleteUndoTimer = null;
+  pendingDeleteUndo = null;
+  if (deleteUndoSnackbar) deleteUndoSnackbar.hidden = true;
+}
+
+function showDeleteUndo(sale, index, revision) {
+  discardDeleteUndo();
+  pendingDeleteUndo = { sale, index, revision };
+  deleteUndoMessage.textContent = `「${sale.itemName}」を削除しました。`;
+  deleteUndoSnackbar.hidden = false;
+  deleteUndoTimer = setTimeout(discardDeleteUndo, 10000);
+}
+
+async function undoLastDelete() {
+  if (!pendingDeleteUndo) return;
+  const undo = pendingDeleteUndo;
+  if (currentRevision !== undo.revision) {
+    discardDeleteUndo();
+    showDataManagementStatus("ほかの更新が行われたため、削除を元に戻せませんでした。", "error");
+    return;
+  }
+  const nextSales = UsedClothesCore.insertAt(sales, undo.sale, undo.index);
+  if (!await commitSales(nextSales, "削除を元に戻しました。", { expectedRevision: undo.revision })) return;
+  discardDeleteUndo();
+  renderDashboard();
+}
+
 // 指定されたidの商品を削除します
 async function deleteSale(id) {
-  if (!confirm("この商品を削除しますか？")) {
+  const deletedIndex = sales.findIndex(function (sale) { return saleIdsMatch(sale.id, id); });
+  const deletedSale = sales[deletedIndex];
+  if (!deletedSale || !confirm(`「${deletedSale.itemName}」を削除しますか？`)) {
     return;
   }
 
@@ -3343,6 +3417,7 @@ async function deleteSale(id) {
   if (!await commitSales(nextSales, "商品を削除しました。")) {
     return;
   }
+  showDeleteUndo(deletedSale, deletedIndex, currentRevision);
 
   if (editingSaleId !== null && saleIdsMatch(editingSaleId, id)) {
     resetForm();
@@ -3366,7 +3441,11 @@ async function deleteAllData() {
     return;
   }
 
-  if (!await commitSales([], "", { replaceAll: true })) return;
+  const sourceRevision = currentRevision;
+  const backupCreatedAt = downloadDestructiveBackup(sourceRevision, "delete-all");
+  if (!backupCreatedAt) return;
+  if (!await commitSales([], "", { replaceAll: true, expectedRevision: sourceRevision, metaPatch: { lastBackupAt: backupCreatedAt } })) return;
+  discardDeleteUndo();
   resetForm();
   renderDashboard();
   showDataManagementStatus("登録済みの売上データをすべて削除しました。");
@@ -3405,6 +3484,7 @@ function hasUnsavedFormWork() {
 // 別タブの変更は未入力時だけ自動反映し、入力中は勝手に画面を書き換えません。
 window.addEventListener("storage", function (event) {
   if (event.key !== STORAGE_KEY && event.key !== APP_META_STORAGE_KEY) return;
+  discardDeleteUndo();
   if (hasUnsavedFormWork()) {
     externalStorageChangePending = true;
     showDataManagementStatus("別の画面で売上データが更新されました。入力内容は保持しています。保存前に再読み込みして確認してください。", "warning");
@@ -3494,6 +3574,10 @@ placeholderDeleteButton.addEventListener("click", async function () {
   }
 });
 
+undoDeleteButton.addEventListener("click", async function () {
+  await undoLastDelete();
+});
+
 // 編集をやめたいときは、入力フォームだけを元に戻します
 cancelEditButton.addEventListener("click", function () {
   resetForm();
@@ -3576,6 +3660,7 @@ itemImageInput.addEventListener("change", async function () {
   imageSelectionId += 1;
   const currentSelectionId = imageSelectionId;
   const file = itemImageInput.files[0];
+  const previousImageData = resizedImageData;
 
   if (!file) {
     resizedImageData = "";
@@ -3604,13 +3689,17 @@ itemImageInput.addEventListener("change", async function () {
     removeImageButton.style.display = "block";
     removeImageButton.disabled = false;
   } catch (error) {
-    resizedImageData = "";
-    imageResizePromise = Promise.resolve("");
-    imagePreviewWrap.style.display = "none";
-    imagePreview.removeAttribute("src");
-    removeImageButton.style.display = "none";
-    removeImageButton.disabled = true;
-    alert("画像を読み込めませんでした。別の画像を選んでください。");
+    resizedImageData = previousImageData;
+    imageResizePromise = Promise.resolve(previousImageData);
+    imagePreviewWrap.style.display = previousImageData ? "block" : "none";
+    if (previousImageData) imagePreview.src = previousImageData;
+    else imagePreview.removeAttribute("src");
+    removeImageButton.style.display = previousImageData ? "block" : "none";
+    removeImageButton.disabled = !previousImageData;
+    itemImageInput.value = "";
+    const message = error instanceof Error ? error.message : "画像を読み込めませんでした。別の画像を選んでください。";
+    showDataManagementStatus(message, "error");
+    alert(message);
   }
 });
 

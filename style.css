@@ -968,6 +968,70 @@ body {
   }
 }
 
+/* 端末内保存の注意とバックアップ時期を、操作結果とは別に常時表示します */
+.backup-status-home,
+.backup-status-detail,
+.device-storage-warning {
+  box-sizing: border-box;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.backup-status-home,
+.backup-status-detail {
+  margin: 0 0 18px;
+  padding: 11px 14px;
+  color: #24543c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.backup-status-home[data-level="warning"],
+.backup-status-detail[data-level="warning"] { color: #7c4a03; background: #fff9eb; border-color: #f2c46d; }
+.backup-status-home[data-level="danger"],
+.backup-status-detail[data-level="danger"] { color: #8f1d1d; background: #fff5f5; border-color: #e6a5a5; }
+
+.device-storage-warning {
+  display: grid;
+  gap: 4px;
+  margin: 14px 0;
+  padding: 14px;
+  color: #3f4854;
+  line-height: 1.5;
+}
+
+.device-storage-warning strong { color: #161c24; }
+
+.delete-undo-snackbar {
+  position: fixed;
+  z-index: 120;
+  right: max(14px, calc((100vw - 680px) / 2));
+  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 12px);
+  left: max(14px, calc((100vw - 680px) / 2));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 12px 10px 16px;
+  border-radius: 8px;
+  color: #fff;
+  background: #20262e;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+}
+
+.delete-undo-snackbar[hidden] { display: none; }
+.delete-undo-snackbar span { min-width: 0; overflow-wrap: anywhere; }
+.delete-undo-snackbar button { flex: 0 0 auto; min-height: 40px; padding: 8px 12px; border: 1px solid #fff; color: #fff; background: transparent; }
+
+@media (max-width: 768px) {
+  .backup-status-home,
+  .backup-status-detail { margin-bottom: 12px; padding: 9px 11px; font-size: 13px; }
+  .device-storage-warning { margin: 10px 0; padding: 11px; font-size: 13px; }
+  .delete-undo-snackbar { right: 10px; left: 10px; }
+}
+
 /* =========================================================
    第2段階: 週間・日別・販路別の専用分析画面
    ========================================================= */

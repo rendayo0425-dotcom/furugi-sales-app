@@ -16,5 +16,5 @@ test("HTMLとService Workerの資産版が一致し、共通処理もオフラ�
     assert.match(html, new RegExp(`${fileName.replace(".", "\\.")}\\?v=${version}`));
     assert.match(worker, new RegExp(`\\./${fileName.replace(".", "\\.")}\\?v=\\$\\{ASSET_VERSION\\}`));
   });
-  assert.match(worker, /used-clothes-sales-v11-stage1/);
+  assert.match(worker, /used-clothes-sales-v11-stage2/);
 });

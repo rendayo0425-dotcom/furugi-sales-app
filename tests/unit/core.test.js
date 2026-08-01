@@ -5,7 +5,16 @@ const {
   normalizeAppMeta,
   normalizeSaleRecord,
   partitionRecords,
-  mergeQuarantinedRecords
+  mergeQuarantinedRecords,
+  protectCsvText,
+  escapeCsvCell,
+  parseCsv,
+  getDuplicateHeaders,
+  validateImageDataUrl,
+  insertAt,
+  isFileSizeAllowed,
+  getContainedSize,
+  buildBackupPayload
 } = require("../../core.js");
 
 test("手数料は1円未満を切り捨て、利益も同じ値から計算する", function () {
@@ -13,6 +22,70 @@ test("手数料は1円未満を切り捨て、利益も同じ値から計算す�
   assert.equal(result.fee, 999);
   assert.equal(result.profit, 6790);
   assert.equal(result.profitRate, 6790 / 9999 * 100);
+});
+
+test("CSVの文字列だけ数式先頭を無害化し、空白は保持する", function () {
+  assert.equal(protectCsvText("　 =SUM(A1:A2)"), "'　 =SUM(A1:A2)");
+  assert.equal(protectCsvText("\t危険"), "'\t危険");
+  assert.equal(protectCsvText("通常の商品"), "通常の商品");
+  assert.equal(escapeCsvCell("=1+1", true), '"\'=1+1"');
+  assert.equal(escapeCsvCell(-100, false), '"-100"');
+});
+
+test("CSV状態機械は引用符内改行を読み、壊れた引用符を拒否する", function () {
+  const valid = parseCsv('"商品名","メモ"\n"Tシャツ","1行目\n2行目"');
+  assert.equal(valid.ok, true);
+  assert.equal(valid.rows[1][1], "1行目\n2行目");
+  assert.equal(parseCsv('"商品名\nTシャツ').ok, false);
+  assert.equal(parseCsv('商"品名,売値').ok, false);
+  assert.equal(parseCsv('"商品名"x,売値').ok, false);
+});
+
+test("見出しはtrim後の重複を検出する", function () {
+  assert.deepEqual(getDuplicateHeaders(["商品名", " 商品名 ", "売値"]), ["商品名"]);
+});
+
+test("JSON画像は許可形式の署名と容量を検査する", function () {
+  const jpeg = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0x00]).toString("base64")}`;
+  const fakePng = `data:image/png;base64,${Buffer.from([0xff, 0xd8, 0xff, 0x00]).toString("base64")}`;
+  assert.equal(validateImageDataUrl(jpeg, 500 * 1024).ok, true);
+  assert.equal(validateImageDataUrl(fakePng, 500 * 1024).ok, false);
+  assert.equal(validateImageDataUrl("data:image/svg+xml;base64,PHN2Zz4=", 500 * 1024).ok, false);
+  assert.equal(validateImageDataUrl("data:image/jpeg;base64,%%%%", 500 * 1024).ok, false);
+  assert.equal(validateImageDataUrl(jpeg, 2).ok, false);
+});
+
+test("削除取消は元の配列位置へ同じ内容を戻す", function () {
+  const deleted = { id: "b", itemName: "元の商品", unknown: { keep: true } };
+  const restored = insertAt([{ id: "a" }, { id: "c" }], deleted, 1);
+  assert.strictEqual(restored[1], deleted);
+  assert.deepEqual(restored.map(function (sale) { return sale.id; }), ["a", "b", "c"]);
+});
+
+test("ファイル容量は上限ちょうどを許可し、1byte超過を拒否する", function () {
+  assert.equal(isFileSizeAllowed(5 * 1024 * 1024, 5 * 1024 * 1024), true);
+  assert.equal(isFileSizeAllowed(5 * 1024 * 1024 + 1, 5 * 1024 * 1024), false);
+  assert.equal(isFileSizeAllowed(15 * 1024 * 1024, 15 * 1024 * 1024), true);
+  assert.equal(isFileSizeAllowed(15 * 1024 * 1024 + 1, 15 * 1024 * 1024), false);
+});
+
+test("縦長・横長画像の両辺を300px以内に収める", function () {
+  assert.deepEqual(getContainedSize(4000, 1000, 300), { width: 300, height: 75 });
+  assert.deepEqual(getContainedSize(1000, 4000, 300), { width: 75, height: 300 });
+});
+
+test("完全バックアップへ隔離行を元位置のまま含める", function () {
+  const broken = { id: "broken", future: "keep" };
+  const backup = buildBackupPayload({
+    backupVersion: 1,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    appMeta: { revision: 2 },
+    sales: [{ id: "valid" }],
+    quarantinedSales: [{ index: 0, record: broken, reasons: ["不正"] }],
+    collapsedSections: {}
+  });
+  assert.strictEqual(backup.sales[0], broken);
+  assert.equal(backup.backupVersion, 1);
 });
 
 test("旧メタ情報へrevisionとバックアップ項目を後方互換で補う", function () {

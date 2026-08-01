@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>古着売上管理</title>
-  <link rel="manifest" href="manifest.json?v=20260801-2">
+  <link rel="manifest" href="manifest.json?v=20260801-3">
   <meta name="theme-color" content="#FF3B0A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="古着売上管理">
@@ -27,7 +27,7 @@
     }
   </style>
   <!-- 版番号を付け、iPhone PWAが更新前のCSSを再利用しないようにします -->
-  <link rel="stylesheet" href="style.css?v=20260801-2">
+  <link rel="stylesheet" href="style.css?v=20260801-3">
 </head>
 <body>
   <!-- 外部通信なしで使える、Lucideをもとにした共通アイコンです -->
@@ -67,6 +67,8 @@
         <span class="cta-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg></span>
         売上を登録
       </a>
+
+      <p id="backupStatusHome" class="backup-status-home" data-level="ok">バックアップ状態を確認しています。</p>
 
       <section class="surface home-summary" aria-labelledby="homeSummaryTitle">
         <h2 id="homeSummaryTitle" class="sr-only">選択中の月の主要実績</h2>
@@ -372,6 +374,11 @@
       <p class="screen-description">バックアップとCSV</p>
       <!-- 読み上げは全画面共通欄に任せ、この欄は管理画面内の履歴として同期表示します -->
       <div id="dataManagementStatus" class="data-management-status">保存データを確認しています。</div>
+      <aside class="device-storage-warning">
+        <strong>この端末・このブラウザだけに保存されます</strong>
+        <span>クラウド同期はされません。機種変更やデータ消失に備えてJSONバックアップを作成してください。</span>
+      </aside>
+      <p id="backupStatusDetail" class="backup-status-detail" data-level="ok">バックアップ状態を確認しています。</p>
       <section class="surface data-manage-card">
         <h2>JSON完全バックアップ</h2>
           <p>商品画像と設定を含むJSONファイルを保存します。</p>
@@ -432,6 +439,12 @@
     </section>
   </main>
 
+  <!-- 単品削除だけ、10秒以内なら元の位置へ戻せます -->
+  <div id="deleteUndoSnackbar" class="delete-undo-snackbar" role="status" aria-live="polite" hidden>
+    <span id="deleteUndoMessage">商品を削除しました。</span>
+    <button id="undoDeleteButton" type="button">元に戻す</button>
+  </div>
+
   <nav class="bottom-nav" aria-label="メインメニュー">
     <a href="#home" data-nav-group="home"><svg class="ui-icon" aria-hidden="true"><use href="#icon-home"></use></svg><span>ホーム</span></a>
     <a href="#register" data-nav-group="register"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus-square"></use></svg><span>登録</span></a>
@@ -440,14 +453,14 @@
   </nav>
 
   <!-- 計算と保存の共通処理を先に読み込み、画面処理から再利用します -->
-  <script src="core.js?v=20260801-2"></script>
-  <script src="storage.js?v=20260801-2"></script>
-  <script src="script.js?v=20260801-2"></script>
+  <script src="core.js?v=20260801-3"></script>
+  <script src="storage.js?v=20260801-3"></script>
+  <script src="script.js?v=20260801-3"></script>
   <script>
     // Service Workerの登録に失敗しても、アプリ本体はそのまま利用できます
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./service-worker.js?v=11", {
+        navigator.serviceWorker.register("./service-worker.js?v=11-stage2", {
           // SafariのHTTPキャッシュを使わず、Service Worker本体の更新を確認します。
           updateViaCache: "none"
         }).then(function (registration) {
